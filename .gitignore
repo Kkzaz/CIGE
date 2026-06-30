@@ -1,0 +1,11 @@
+# Local configuration
+node_modules
+dist
+out
+.DS_Store
+*.log
+tools/.redfox_key
+tools/.env
+.env
+.env.local
+.vite-port

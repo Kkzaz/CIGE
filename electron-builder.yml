@@ -1,0 +1,38 @@
+appId: com.cige.app
+productName: 词歌
+copyright: Copyright 2024
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - node_modules/**/*
+  - package.json
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+
+win:
+  icon: build/icon.ico
+
+linux:
+  icon: build/icon.png
+
+dmg:
+  title: 词歌 CiGe
+  iconSize: 80
+  window:
+    width: 500
+    height: 400
+
+asar: true
+compression: maximum

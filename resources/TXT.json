@@ -1,0 +1,18 @@
+{
+    "bookSourceGroup": "4、普通",
+    "bookSourceName": "TXT小说天堂",
+    "bookSourceType": 0,
+    "bookSourceUrl": "http://www.xiaoshuotxt.org",
+    "customOrder": 1282,
+    "enabled": true,
+    "enabledExplore": true,
+    "exploreUrl": "文学名著::http://www.xiaoshuotxt.org/mingzhu/<index,index_2,index_3,index_{{page+1}}>.html\n现代小说::http://www.xiaoshuotxt.org/dangdai/<index,index_2,index_3,index_{{page+1}}>.html\n世界名著::http://www.xiaoshuotxt.org/waiwen/<index,index_2,index_3,index_{{page+1}}>.html\n儿童文学::http://www.xiaoshuotxt.org/ertong/<index,index_2,index_3,index_{{page+1}}>.html\n古典名著::http://www.xiaoshuotxt.org/gudian/<index,index_2,index_3,index_{{page+1}}>.html\n散文随笔::http://www.xiaoshuotxt.org/sanwen/<index,index_2,index_3,index_{{page+1}}>.html\n青春校园::http://www.xiaoshuotxt.org/qingchun/<index,index_2,index_3,index_{{page+1}}>.html文学评论::http://www.xiaoshuotxt.org/pinglun/<index,index_2,index_3,index_{{page+1}}>.html\n玄幻小说::http://www.xiaoshuotxt.org/xuanhuan/<index,index_2,index_3,index_{{page+1}}>.html\n言情小说::http://www.xiaoshuotxt.org/yanqing/<index,index_2,index_3,index_{{page+1}}>.html\n武侠小说::http://www.xiaoshuotxt.org/wuxia/<index,index_2,index_3,index_{{page+1}}>.html\n穿越小说::http://www.xiaoshuotxt.org/chuanyue/<index,index_2,index_3,index_{{page+1}}>.html\n侦探悬疑::http://www.xiaoshuotxt.org/xuanyi/<index,index_2,index_3,index_{{page+1}}>.html\n科幻小说::http://www.xiaoshuotxt.org/kehuan/<index,index_2,index_3,index_{{page+1}}>.html\n网游小说::http://www.xiaoshuotxt.org/wangyou/<index,index_2,index_3,index_{{page+1}}>.html\n人文社科::http://www.xiaoshuotxt.org/renwen/<index,index_2,index_3,index_{{page+1}}>.html\n人文传记::http://www.xiaoshuotxt.org/zhuanji/<index,index_2,index_3,index_{{page+1}}>.html\n历史小说::http://www.xiaoshuotxt.org/lishi/<index,index_2,index_3,index_{{page+1}}>.html\n军事小说::http://www.xiaoshuotxt.org/junshi/<index,index_2,index_3,index_{{page+1}}>.html\n励志书籍::http://www.xiaoshuotxt.org/lizhi/<index,index_2,index_3,index_{{page+1}}>.html\n社会科普::http://www.xiaoshuotxt.org/shenghuo/<index,index_2,index_3,index_{{page+1}}>.html\n杂志合集::http://www.xiaoshuotxt.org/writer/zazhi.html\n杂志合集::http://www.xiaoshuotxt.org/writer/huayu_2.html",
+    "lastUpdateTime": 0,
+    "ruleBookInfo": "{\n  \"coverUrl\": \"class.img1@tag.img.0@src\",\n  \"intro\": \"tag.p.3@text\"\n}",
+    "ruleContent": "{\n  \"content\": \"class.zw@tag.p@text||class.zw@textNodes##小说天堂| www.Xiaoshuotxt.NET，\",\n  \"nextContentUrl\": \"class.np@text.下一章@href\"\n}",
+    "ruleExplore": "{}",
+    "ruleSearch": "{\n  \"author\": \"tag.p.1@tag.a.0@text\",\n  \"bookList\": \"class.bbox||class.sbintro@tag.div!0\",\n  \"bookUrl\": \"class.sbzp@tag.a.0@href||tag.h3@tag.a.0@href\",\n  \"coverUrl\": \"class.bpic@tag.img@src\",\n  \"kind\": \"tag.span@text\",\n  \"lastChapter\": \"tag.p.0@tag.a.0@text\",\n  \"name\": \"class.sbzp@tag.a.0@text||tag.h3@tag.a.0@text\"\n}",
+    "ruleToc": "{\n  \"chapterList\": \"tag.ul.5@tag.li.0@tag.a\",\n  \"chapterName\": \"tag.a@text\",\n  \"chapterUrl\": \"tag.a@href\"\n}",
+    "searchUrl": "http://zhannei.baidu.com/cse/search?s=17041178045159340486&entry=1&q={{key}}&x=8&y=12",
+    "weight": 0
+}
