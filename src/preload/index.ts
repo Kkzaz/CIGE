@@ -75,6 +75,16 @@ const api = {
   setAppSetting: (key: 'autoSyncOnLaunch' | 'showSplash', value: boolean) => ipcRenderer.invoke('app:set-setting', key, value),
   resetAppSettings: () => ipcRenderer.invoke('app:reset-settings'),
 
+  // Auto update
+  checkForUpdate: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (callback: (status: string, payload?: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: string, payload?: unknown) => callback(status, payload);
+    ipcRenderer.on('update-status', handler);
+    return () => ipcRenderer.removeListener('update-status', handler);
+  },
+
   // Recycle bin
   getDeletedItems: () => ipcRenderer.invoke('recycle:get-all'),
   restoreItem: (type: string, id: number) => ipcRenderer.invoke('recycle:restore', type, id),
