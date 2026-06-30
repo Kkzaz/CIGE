@@ -2,10 +2,19 @@
 node_modules
 dist
 out
+release
 .DS_Store
 *.log
+.vite-port
+
+# Environment & secrets
 tools/.redfox_key
 tools/.env
 .env
 .env.local
-.vite-port
+
+# Local data & debug
+.db/
+.dbg/
+.trae/
+debug-*.md
