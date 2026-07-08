@@ -1,6 +1,6 @@
 {
   "name": "cige",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "CiGe - 词作者创作辅助应用",
   "main": "dist/main/main/index.js",
   "scripts": {
