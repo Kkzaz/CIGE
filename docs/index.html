@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CiGe 词歌 - 中文词作者创作辅助工具</title>
+  <meta name="description" content="CiGe 词歌是一款面向中文词作者的创作辅助应用，提供歌词查重、AI 对话助手、本地书架阅读等功能。">
+  <meta property="og:title" content="CiGe 词歌 - 中文词作者创作辅助工具">
+  <meta property="og:description" content="歌词查重、AI 创作助手、本地书架阅读，为中文词作者打造的沉浸式创作工具。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E8%AF%8D%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #faf8f5;
+      --bg-elevated: #ffffff;
+      --text: #1f1c18;
+      --text-secondary: #5c5650;
+      --text-tertiary: #8f8780;
+      --accent: #9c6b3c;
+      --accent-light: rgba(156, 107, 60, 0.08);
+      --border: rgba(31, 28, 24, 0.08);
+      --shadow: 0 24px 60px rgba(31, 28, 24, 0.08);
+      --radius: 20px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: "Noto Serif SC", "Songti SC", "SimSun", serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141210;
+        --bg-elevated: #1c1a17;
+        --text: #f2efe9;
+        --text-secondary: #b5afa7;
+        --text-tertiary: #7f7871;
+        --accent: #c89b6a;
+        --accent-light: rgba(200, 155, 106, 0.12);
+        --border: rgba(242, 239, 233, 0.08);
+        --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+      }
+    }
+
+    [data-theme="light"] {
+      --bg: #faf8f5;
+      --bg-elevated: #ffffff;
+      --text: #1f1c18;
+      --text-secondary: #5c5650;
+      --text-tertiary: #8f8780;
+      --accent: #9c6b3c;
+      --accent-light: rgba(156, 107, 60, 0.08);
+      --border: rgba(31, 28, 24, 0.08);
+      --shadow: 0 24px 60px rgba(31, 28, 24, 0.08);
+    }
+
+    [data-theme="dark"] {
+      --bg: #141210;
+      --bg-elevated: #1c1a17;
+      --text: #f2efe9;
+      --text-secondary: #b5afa7;
+      --text-tertiary: #7f7871;
+      --accent: #c89b6a;
+      --accent-light: rgba(200, 155, 106, 0.12);
+      --border: rgba(242, 239, 233, 0.08);
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Navigation */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(var(--bg), 0.85);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 68px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-serif);
+      font-size: 18px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .nav-links a:hover {
+      color: var(--accent);
+    }
+
+    .theme-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .mobile-menu {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 100px 0 120px;
+      overflow: hidden;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 64px;
+      align-items: center;
+    }
+
+    .hero-content {
+      max-width: 560px;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 24px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--accent-light);
+    }
+
+    .hero-title {
+      font-size: clamp(40px, 6vw, 64px);
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+      margin-bottom: 24px;
+    }
+
+    .hero-title em {
+      font-family: var(--font-serif);
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    .hero-desc {
+      font-size: 18px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+      margin-bottom: 36px;
+      max-width: 480px;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 28px rgba(156, 107, 60, 0.28);
+    }
+
+    .btn-secondary {
+      background: var(--bg-elevated);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .hero-visual {
+      position: relative;
+    }
+
+    .hero-image {
+      width: 100%;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: block;
+    }
+
+    .hero-art {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .hero-art svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .hero-float {
+      position: absolute;
+      bottom: -24px;
+      left: -24px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 22px;
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .hero-float strong {
+      display: block;
+      color: var(--text);
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+
+    /* Sections */
+    .section {
+      padding: 100px 0;
+    }
+
+    .section-header {
+      text-align: center;
+      max-width: 620px;
+      margin: 0 auto 72px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 4vw, 40px);
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+      font-weight: 700;
+    }
+
+    .section-desc {
+      font-size: 17px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .feature {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      transition: all 0.3s ease;
+    }
+
+    .feature:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow);
+    }
+
+    .feature-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: var(--accent-light);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+
+    .feature-icon svg {
+      width: 26px;
+      height: 26px;
+      stroke-width: 1.8;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .feature-desc {
+      font-size: 15px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    /* Highlight */
+    .highlight {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+      margin-bottom: 120px;
+    }
+
+    .highlight:last-child {
+      margin-bottom: 0;
+    }
+
+    .highlight.reverse {
+      direction: rtl;
+    }
+
+    .highlight.reverse > * {
+      direction: ltr;
+    }
+
+    .highlight-image {
+      width: 100%;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .highlight-art {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .highlight-art svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .highlight-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+    }
+
+    .highlight-title {
+      font-size: 32px;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+      line-height: 1.25;
+    }
+
+    .highlight-desc {
+      font-size: 16px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+    }
+
+    /* Download */
+    .download {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 80px;
+      text-align: center;
+    }
+
+    .download-title {
+      font-size: 36px;
+      letter-spacing: -0.02em;
+      margin-bottom: 18px;
+    }
+
+    .download-desc {
+      font-size: 17px;
+      color: var(--text-secondary);
+      margin-bottom: 36px;
+      max-width: 520px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .download-meta {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      margin-top: 18px;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      color: var(--text-tertiary);
+      font-size: 14px;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 28px;
+      margin-bottom: 18px;
+    }
+
+    .footer-links a:hover {
+      color: var(--accent);
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .hero-grid,
+      .features,
+      .highlight,
+      .highlight.reverse {
+        grid-template-columns: 1fr;
+        gap: 48px;
+      }
+
+      .highlight.reverse {
+        direction: ltr;
+      }
+
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu {
+        display: block;
+      }
+
+      .hero {
+        padding: 70px 0 90px;
+      }
+
+      .section {
+        padding: 70px 0;
+      }
+
+      .download {
+        padding: 56px 28px;
+      }
+
+      .hero-float {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="#" class="logo">
+        <span class="logo-mark">词</span>
+        <span>CiGe 词歌</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">功能</a>
+        <a href="#download">下载</a>
+        <a href="https://github.com/Kkzaz/CIGE" target="_blank" rel="noreferrer">GitHub</a>
+      </div>
+      <button class="theme-toggle" id="themeToggle" aria-label="切换主题">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="container hero-grid">
+      <div class="hero-content">
+        <div class="hero-eyebrow">v1.1.0 现已发布</div>
+        <h1 class="hero-title">为中文词作者<br>打造的<em>创作桌面</em></h1>
+        <p class="hero-desc">歌词查重、AI 创作助手、本地书架阅读，把创作中零散的查找、记录与灵感整合在一处。</p>
+        <div class="hero-actions">
+          <a href="https://github.com/Kkzaz/CIGE/releases" target="_blank" rel="noreferrer" class="btn btn-primary">免费下载</a>
+          <a href="https://github.com/Kkzaz/CIGE" target="_blank" rel="noreferrer" class="btn btn-secondary">查看源码</a>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="hero-image hero-art" role="img" aria-label="CiGe 词歌创作桌面">
+          <svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="400" height="300" rx="20" fill="var(--bg-elevated)"/>
+            <rect x="30" y="40" width="180" height="220" rx="12" fill="var(--accent-light)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="55" y="70" width="130" height="8" rx="4" fill="var(--text-tertiary)" opacity="0.4"/>
+            <rect x="55" y="90" width="110" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.25"/>
+            <rect x="55" y="104" width="125" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.25"/>
+            <rect x="55" y="118" width="90" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.25"/>
+            <rect x="55" y="146" width="130" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.25"/>
+            <rect x="55" y="160" width="115" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.25"/>
+            <rect x="55" y="188" width="100" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.25"/>
+            <circle cx="310" cy="110" r="55" fill="url(#heroGrad1)" opacity="0.9"/>
+            <circle cx="350" cy="200" r="45" fill="url(#heroGrad2)" opacity="0.85"/>
+            <rect x="235" y="170" width="95" height="75" rx="12" fill="var(--bg-elevated)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="250" y="190" width="65" height="6" rx="3" fill="var(--accent)" opacity="0.6"/>
+            <rect x="250" y="204" width="50" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.3"/>
+            <rect x="250" y="218" width="58" height="6" rx="3" fill="var(--text-tertiary)" opacity="0.3"/>
+            <defs>
+              <radialGradient id="heroGrad1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(300 100) rotate(45) scale(90)">
+                <stop stop-color="var(--accent)" stop-opacity="0.35"/>
+                <stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>
+              </radialGradient>
+              <radialGradient id="heroGrad2" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(340 190) rotate(45) scale(70)">
+                <stop stop-color="var(--accent)" stop-opacity="0.28"/>
+                <stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="hero-float">
+          <strong>沉浸式</strong>
+          专注写作，少切窗口
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">把创作辅助放回桌面</h2>
+        <p class="section-desc">不再在浏览器标签页之间跳转，把查找灵感、验证歌词、整理阅读统一到一个安静的桌面应用里。</p>
+      </div>
+
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+          </div>
+          <h3 class="feature-title">歌词查重</h3>
+          <p class="feature-desc">输入你写的句子，检索网易云音乐中是否存在相似歌词，官方接口优先，无结果时自动网页降级。</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+          </div>
+          <h3 class="feature-title">AI 对话助手</h3>
+          <p class="feature-desc">与 Gemini 对话，获取押韵、意象、修辞和情感表达建议。支持多会话历史，断开后仍可继续。</p>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          </div>
+          <h3 class="feature-title">本地书架阅读</h3>
+          <p class="feature-desc">导入在线书源或本地书籍，自动分页、管理目录，把参考资料和灵感来源集中管理。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="highlight">
+        <div class="highlight-image highlight-art" role="img" aria-label="歌词查重">
+          <svg viewBox="0 0 400 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="400" height="280" rx="20" fill="var(--bg-elevated)"/>
+            <rect x="40" y="40" width="320" height="200" rx="16" fill="var(--accent-light)" stroke="var(--border)" stroke-width="1"/>
+            <path d="M80 100 Q130 80 180 100 T280 100" stroke="var(--accent)" stroke-width="3" fill="none" opacity="0.5" stroke-linecap="round"/>
+            <path d="M80 140 Q140 120 200 140 T320 140" stroke="var(--accent)" stroke-width="3" fill="none" opacity="0.35" stroke-linecap="round"/>
+            <path d="M80 180 Q120 165 160 180 T240 180" stroke="var(--accent)" stroke-width="3" fill="none" opacity="0.25" stroke-linecap="round"/>
+            <circle cx="260" cy="90" r="28" fill="var(--accent)" opacity="0.15"/>
+            <text x="246" y="98" font-family="var(--font-serif)" font-size="24" fill="var(--accent)">韵</text>
+            <rect x="60" y="210" width="120" height="10" rx="5" fill="var(--accent)" opacity="0.7"/>
+            <rect x="200" y="210" width="100" height="10" rx="5" fill="var(--text-tertiary)" opacity="0.3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="highlight-label">歌词查重</div>
+          <h3 class="highlight-title">先验证，再落笔</h3>
+          <p class="highlight-desc">写歌词时最怕"撞句"。输入你的文案，CiGe 会检索网易云音乐中的现有歌词，用最长公共子串等算法给出相似度结果，并在卡片中展示完整歌词供你判断是否重复。</p>
+        </div>
+      </div>
+
+      <div class="highlight reverse">
+        <div class="highlight-image highlight-art" role="img" aria-label="AI 对话助手">
+          <svg viewBox="0 0 400 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="400" height="280" rx="20" fill="var(--bg-elevated)"/>
+            <rect x="50" y="50" width="220" height="90" rx="14" fill="var(--accent-light)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="75" y="78" width="170" height="8" rx="4" fill="var(--text-tertiary)" opacity="0.35"/>
+            <rect x="75" y="94" width="140" height="8" rx="4" fill="var(--text-tertiary)" opacity="0.25"/>
+            <rect x="130" y="160" width="220" height="90" rx="14" fill="var(--bg-elevated)" stroke="var(--border)" stroke-width="1"/>
+            <rect x="155" y="188" width="170" height="8" rx="4" fill="var(--accent)" opacity="0.5"/>
+            <rect x="155" y="204" width="130" height="8" rx="4" fill="var(--accent)" opacity="0.35"/>
+            <circle cx="330" cy="110" r="40" fill="url(#aiGrad)" opacity="0.7"/>
+            <text x="318" y="118" font-family="var(--font-serif)" font-size="28" fill="var(--accent)">AI</text>
+            <defs>
+              <radialGradient id="aiGrad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(320 100) rotate(45) scale(70)">
+                <stop stop-color="var(--accent)" stop-opacity="0.35"/>
+                <stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <div class="highlight-label">AI 对话助手</div>
+          <h3 class="highlight-title">一个随时可问的创作伙伴</h3>
+          <p class="highlight-desc">卡壳时和 Gemini 聊聊。它可以帮你拓展意象、找押韵、换表达方式，甚至给整段歌词提修改建议。对话支持多会话，你可以同时开几个主题，互不干扰。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="download">
+    <div class="container">
+      <div class="download">
+        <h2 class="download-title">开始使用 CiGe 词歌</h2>
+        <p class="download-desc">当前版本 v1.1.0，支持 macOS 与 Windows。下载安装包后即可本地运行，无需联网也能使用大部分功能。</p>
+        <a href="https://github.com/Kkzaz/CIGE/releases/tag/v1.1.0" target="_blank" rel="noreferrer" class="btn btn-primary">前往 GitHub Releases 下载</a>
+        <p class="download-meta">开源免费 · 数据本地存储 · API Key 需自行配置</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-links">
+        <a href="https://github.com/Kkzaz/CIGE" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/Kkzaz/CIGE/releases" target="_blank" rel="noreferrer">Releases</a>
+        <a href="https://github.com/Kkzaz/CIGE/issues" target="_blank" rel="noreferrer">反馈问题</a>
+      </div>
+      <p>© 2026 CiGe 词歌. Released under the MIT License.</p>
+    </div>
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('themeToggle');
+    const root = document.documentElement;
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function getTheme() {
+      return localStorage.getItem('theme') || (systemDark.matches ? 'dark' : 'light');
+    }
+
+    function setTheme(theme) {
+      root.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+    }
+
+    setTheme(getTheme());
+
+    themeToggle.addEventListener('click', () => {
+      const current = getTheme();
+      setTheme(current === 'light' ? 'dark' : 'light');
+    });
+
+    systemDark.addEventListener('change', (e) => {
+      if (!localStorage.getItem('theme')) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    });
+  </script>
+</body>
+</html>
