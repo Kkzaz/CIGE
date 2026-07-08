@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import BookSourcePreview from './BookSourcePreview';
 
 interface BookSource {
   id: number;
@@ -25,7 +27,7 @@ interface ExploreGroup {
 interface DiscoveryProps {
   onClose: () => void;
   onToast: (message: string) => void;
-  onImport: () => void;
+  onImport: (bookId: number) => void;
   onOpenSearch?: (sourceId: number) => void;
 }
 
@@ -34,7 +36,7 @@ const Discovery: React.FC<DiscoveryProps> = ({ onClose, onToast, onImport, onOpe
   const [selectedSourceId, setSelectedSourceId] = useState<number | null>(null);
   const [groups, setGroups] = useState<ExploreGroup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [importingUrl, setImportingUrl] = useState<string | null>(null);
+  const [previewBook, setPreviewBook] = useState<SearchBook | null>(null);
 
   useEffect(() => {
     loadSources();
@@ -74,17 +76,14 @@ const Discovery: React.FC<DiscoveryProps> = ({ onClose, onToast, onImport, onOpe
     }
   };
 
-  const handleImport = async (sourceId: number, book: SearchBook) => {
-    setImportingUrl(book.bookUrl);
-    try {
-      await window.cigeAPI.importBookFromSource(sourceId, book.bookUrl, 50);
-      onToast(`《${book.name}》已导入图书馆`);
-      onImport();
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : '导入失败');
-    } finally {
-      setImportingUrl(null);
-    }
+  const openPreview = (book: SearchBook) => {
+    if (!selectedSourceId) return;
+    setPreviewBook(book);
+  };
+
+  const handlePreviewImport = (bookId: number) => {
+    setPreviewBook(null);
+    onImport(bookId);
   };
 
   const isComicSource = (source: BookSource) => {
@@ -96,7 +95,7 @@ const Discovery: React.FC<DiscoveryProps> = ({ onClose, onToast, onImport, onOpe
     }
   };
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="discovery-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="discovery-header">
@@ -153,7 +152,11 @@ const Discovery: React.FC<DiscoveryProps> = ({ onClose, onToast, onImport, onOpe
                 <div className="discovery-group-title">{group.title}</div>
                 <div className="discovery-books">
                   {group.books.map((book) => (
-                    <div key={book.bookUrl} className="discovery-book">
+                    <div
+                      key={book.bookUrl}
+                      className="discovery-book"
+                      onClick={() => openPreview(book)}
+                    >
                       <div
                         className="discovery-book-cover"
                         style={{ background: book.coverUrl ? `url(${book.coverUrl}) center/cover` : '#D4C4A8' }}
@@ -165,10 +168,12 @@ const Discovery: React.FC<DiscoveryProps> = ({ onClose, onToast, onImport, onOpe
                       </div>
                       <button
                         className="discovery-import-btn"
-                        onClick={() => selectedSourceId && handleImport(selectedSourceId, book)}
-                        disabled={importingUrl === book.bookUrl}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openPreview(book);
+                        }}
                       >
-                        {importingUrl === book.bookUrl ? '导入中...' : '导入'}
+                        查看
                       </button>
                     </div>
                   ))}
@@ -178,7 +183,17 @@ const Discovery: React.FC<DiscoveryProps> = ({ onClose, onToast, onImport, onOpe
           )}
         </div>
       </div>
-    </div>
+      {previewBook && selectedSourceId && (
+        <BookSourcePreview
+          sourceId={selectedSourceId}
+          book={previewBook}
+          onClose={() => setPreviewBook(null)}
+          onImport={handlePreviewImport}
+          onToast={onToast}
+        />
+      )}
+    </div>,
+    document.body
   );
 };
 

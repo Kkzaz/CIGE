@@ -5,11 +5,33 @@ import RichEditor from '../components/RichEditor';
 import MaterialPanel from '../components/MaterialPanel';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SettingsPanel from '../components/SettingsPanel';
+import WriteToolbar from '../components/write/WriteToolbar';
+import Sidebar from '../components/write/Sidebar';
+import WritingItem from '../components/write/WritingItem';
 import type { RhymeSuggestion, LyricStats, RhymeSource } from '../components/Editor';
 import type { Writing, Folder } from '../../shared/types';
 
 type SaveStatus = 'saved' | 'unsaved' | 'saving';
-type ViewMode = 'list' | 'card';
+
+function htmlToPlainPreview(html: string, maxLines: number = 2): string[] {
+  if (!html) return [];
+  const withBreaks = html
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
+  const decoded = withBreaks
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+  return decoded.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, maxLines);
+}
+
+interface NestedFolder extends Folder {
+  children: NestedFolder[];
+}
 
 const Write: React.FC = () => {
   const { writings, currentWriting, setWritings, setCurrentWriting } = useStore();
@@ -20,9 +42,6 @@ const Write: React.FC = () => {
   const [rhymeSuggestion, setRhymeSuggestion] = useState<RhymeSuggestion | null>(null);
   const [rhymeSource, setRhymeSource] = useState<RhymeSource>('auto');
   const [rhymeRefreshKey, setRhymeRefreshKey] = useState(0);
-  const [lyricStats, setLyricStats] = useState<LyricStats>({
-    lineCount: 0, charCount: 0, rhymeFinals: [], verseCount: 0, chorusCount: 0, bridgeCount: 0, outroCount: 0,
-  });
   const [showSettings, setShowSettings] = useState(false);
   const { updateStats } = useStatusBarStore();
 
@@ -32,7 +51,6 @@ const Write: React.FC = () => {
   };
 
   const handleStatsChange = useCallback((stats: LyricStats) => {
-    setLyricStats(stats);
     updateStats(stats);
   }, [updateStats]);
 
@@ -40,13 +58,20 @@ const Write: React.FC = () => {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const contentDirtyRef = useRef(false);
 
+  // Refs to avoid re-creating the auto-save interval on every keystroke
+  const currentWritingRef = useRef(currentWriting);
+  const contentRef = useRef(content);
+  const titleRef = useRef(title);
+
+  useEffect(() => { currentWritingRef.current = currentWriting; }, [currentWriting]);
+  useEffect(() => { contentRef.current = content; }, [content]);
+  useEffect(() => { titleRef.current = title; }, [title]);
+
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const collapseGuardRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const justCollapsedRef = useRef(false);
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+  const [viewMode, setViewMode] = useState<'list' | 'card'>(() => {
     try {
-      return (localStorage.getItem('cige_sidebar_view') as ViewMode) || 'list';
+      return (localStorage.getItem('cige_sidebar_view') as 'list' | 'card') || 'list';
     } catch { return 'list'; }
   });
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -73,14 +98,26 @@ const Write: React.FC = () => {
     } catch { return 180; }
   });
   const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // Auto-derive title from first line of content
+  const [draggingWritingId, setDraggingWritingId] = useState<number | null>(null);
+  const [dragOverUngrouped, setDragOverUngrouped] = useState(false);
+
+  // 使用 ref 保存正在拖拽的 ID，避免 React 状态批量更新导致 drop 时读到旧值
+  const draggingWritingRef = useRef<number | null>(null);
+  const draggingFolderRef = useRef<number | null>(null);
+
+  // Debounced title derivation
+  const titleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const lines = content.split('\n');
-    const firstNonEmpty = lines.find((l) => l.trim());
-    const derived = firstNonEmpty ? firstNonEmpty.trim().replace(/^\[.*?\]\s*/, '') : '未命名';
-    if (derived !== title) setTitle(derived);
+    if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current);
+    titleTimeoutRef.current = setTimeout(() => {
+      const firstLine = htmlToPlainPreview(content, 1)[0];
+      const derived = firstLine ? firstLine.replace(/^\[.*?\]\s*/, '') : '未命名';
+      if (derived !== title) setTitle(derived);
+    }, 300);
+    return () => {
+      if (titleTimeoutRef.current) clearTimeout(titleTimeoutRef.current);
+    };
   }, [content]);
 
   useEffect(() => {
@@ -125,55 +162,50 @@ const Write: React.FC = () => {
   };
 
   useEffect(() => {
-    const handleClick = () => handleCloseContextMenu();
+    const handleClick = () => setContextMenu(null);
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
   }, []);
 
   const saveOnly = useCallback(async () => {
-    if (!currentWriting) return;
+    const writing = currentWritingRef.current;
+    if (!writing) return;
     try {
-      await window.cigeAPI.updateWriting(currentWriting.id, { title, content });
-      await window.cigeAPI.saveSnapshot(currentWriting.id, content);
+      await window.cigeAPI.updateWriting(writing.id, { title: titleRef.current, content: contentRef.current });
+      await window.cigeAPI.saveSnapshot(writing.id, contentRef.current);
       updateSaveStatus('saved');
       contentDirtyRef.current = false;
     } catch {
       updateSaveStatus('unsaved');
     }
-  }, [currentWriting, title, content]);
+  }, []);
 
   const doSave = useCallback(async () => {
-    if (!currentWriting) return;
+    const writing = currentWritingRef.current;
+    if (!writing) return;
     updateSaveStatus('saving');
     try {
-      await window.cigeAPI.updateWriting(currentWriting.id, { title, content });
-      await window.cigeAPI.saveSnapshot(currentWriting.id, content);
+      await window.cigeAPI.updateWriting(writing.id, { title: titleRef.current, content: contentRef.current });
+      await window.cigeAPI.saveSnapshot(writing.id, contentRef.current);
       updateSaveStatus('saved');
-      contentDirtyRef.current = false;
-      
-      const newId = await window.cigeAPI.createWriting('未命名');
-      const newWriting = await window.cigeAPI.getWritingById(newId as number);
-      setCurrentWriting(newWriting as Writing);
-      setContent('');
-      setTitle('未命名');
       contentDirtyRef.current = false;
       loadWritings();
     } catch {
       updateSaveStatus('unsaved');
     }
-  }, [currentWriting, title, content]);
+  }, []);
 
   useEffect(() => {
     saveTimerRef.current = setInterval(() => {
       if (contentDirtyRef.current) saveOnly();
     }, 15000);
     return () => { if (saveTimerRef.current) clearInterval(saveTimerRef.current); };
-  }, [currentWriting, content, title, saveOnly]);
+  }, [saveOnly]);
 
   const loadWritings = async () => {
     const data = await window.cigeAPI.getWritings();
     setWritings(data as Writing[]);
-    if ((data as Writing[]).length > 0 && !currentWriting) {
+    if ((data as Writing[]).length > 0 && !currentWritingRef.current) {
       selectWriting((data as Writing[])[0]);
     }
   };
@@ -212,6 +244,10 @@ const Write: React.FC = () => {
   };
 
   const handleInsertText = (text: string) => {
+    if (window.cigeEditorAPI?.insertTextAtCursor) {
+      window.cigeEditorAPI.insertTextAtCursor(text);
+      return;
+    }
     const newContent = content + (content.endsWith('\n') ? '' : '\n') + text;
     setContent(newContent);
     contentDirtyRef.current = true;
@@ -222,60 +258,11 @@ const Write: React.FC = () => {
     if (window.cigeEditorAPI && window.cigeEditorAPI.replaceCharBeforeCursor) {
       window.cigeEditorAPI.replaceCharBeforeCursor(char);
     } else {
-      const lines = content.split('\n');
-      if (lines.length === 0) return;
-      let lastNonEmpty = -1;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        if (lines[i].trim()) { lastNonEmpty = i; break; }
-      }
-      if (lastNonEmpty >= 0) {
-        const line = lines[lastNonEmpty];
-        const trimmed = line.trimEnd();
-        if (trimmed.length > 0) {
-          const lastChar = trimmed[trimmed.length - 1];
-          if (/[\u4e00-\u9fff]/.test(lastChar)) {
-            lines[lastNonEmpty] = line.slice(0, -1) + char;
-          } else {
-            lines[lastNonEmpty] = line + char;
-          }
-        } else {
-          lines[lastNonEmpty] = line + char;
-        }
-      }
-      const newContent = lines.join('\n');
+      const newContent = content + char;
       setContent(newContent);
       contentDirtyRef.current = true;
       updateSaveStatus('unsaved');
     }
-  };
-
-  const handleFormatText = (action: string) => {
-    if (!window.cigeEditorAPI) return;
-    switch (action) {
-      case 'bold':
-        window.cigeEditorAPI.toggleBold();
-        break;
-      case 'italic':
-        window.cigeEditorAPI.toggleItalic();
-        break;
-      case 'underline':
-        window.cigeEditorAPI.toggleUnderline();
-        break;
-      case 'strike':
-        window.cigeEditorAPI.toggleStrike();
-        break;
-      case 'align-left':
-        window.cigeEditorAPI.setTextAlign('left');
-        break;
-      case 'align-center':
-        window.cigeEditorAPI.setTextAlign('center');
-        break;
-      case 'align-right':
-        window.cigeEditorAPI.setTextAlign('right');
-        break;
-    }
-    contentDirtyRef.current = true;
-    updateSaveStatus('unsaved');
   };
 
   const handleDeleteWriting = async (id: number) => {
@@ -342,24 +329,31 @@ const Write: React.FC = () => {
   };
 
   // ---- Drag and drop ----
-  const [draggingWritingId, setDraggingWritingId] = useState<number | null>(null);
-
   const handleDragStart = (e: React.DragEvent, writingId: number) => {
+    e.stopPropagation();
+    draggingWritingRef.current = writingId;
+    draggingFolderRef.current = null;
     setDraggingWritingId(writingId);
     setDraggingFolderId(null);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleFolderDragStart = (e: React.DragEvent, folderId: number) => {
+    e.stopPropagation();
+    draggingFolderRef.current = folderId;
+    draggingWritingRef.current = null;
     setDraggingFolderId(folderId);
     setDraggingWritingId(null);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragEnd = () => {
+    draggingWritingRef.current = null;
+    draggingFolderRef.current = null;
     setDraggingWritingId(null);
     setDraggingFolderId(null);
     setDragOverFolderId(null);
+    setDragOverUngrouped(false);
   };
 
   const handleDragOver = (e: React.DragEvent, folderId: number) => {
@@ -369,10 +363,7 @@ const Write: React.FC = () => {
     setDragOverFolderId(folderId);
   };
 
-  const handleDragLeave = (e?: React.DragEvent) => {
-    if (e) {
-      e.stopPropagation();
-    }
+  const handleDragLeave = () => {
     setDragOverFolderId(null);
   };
 
@@ -385,33 +376,24 @@ const Write: React.FC = () => {
     return isDescendantFolder(parentId, folder.parent_id);
   };
 
-  const [dragOverUngrouped, setDragOverUngrouped] = useState(false);
-
   const handleDrop = async (e: React.DragEvent, targetFolderId: number | null) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (draggingWritingId) {
-      await window.cigeAPI.updateWriting(draggingWritingId, { folder_id: targetFolderId });
+
+    const writingId = draggingWritingRef.current;
+    const folderId = draggingFolderRef.current;
+
+    if (writingId) {
+      await window.cigeAPI.updateWriting(writingId, { folder_id: targetFolderId });
       loadWritings();
-    } else if (draggingFolderId) {
-      // Allow moving folder to root (null) or to a different folder
-      const isSameFolder = targetFolderId !== null && draggingFolderId === targetFolderId;
-      if (isSameFolder) {
-        return;
-      }
-      // Prevent dragging a folder into its own descendant
-      if (targetFolderId !== null && isDescendantFolder(draggingFolderId, targetFolderId)) {
-        return;
-      }
-      console.log(`Moving folder ${draggingFolderId} to parent ${targetFolderId}`);
-      await window.cigeAPI.moveFolder(draggingFolderId, targetFolderId);
+    } else if (folderId) {
+      const isSameFolder = targetFolderId !== null && folderId === targetFolderId;
+      if (isSameFolder) return;
+      if (targetFolderId !== null && isDescendantFolder(folderId, targetFolderId)) return;
+      await window.cigeAPI.moveFolder(folderId, targetFolderId);
       loadFolders();
     }
-    setDraggingWritingId(null);
-    setDraggingFolderId(null);
-    setDragOverFolderId(null);
-    setDragOverUngrouped(false);
+    handleDragEnd();
   };
 
   const handleUngroupedDragOver = (e: React.DragEvent) => {
@@ -444,27 +426,7 @@ const Write: React.FC = () => {
     setContextMenu(null);
   };
 
-  const handleCloseContextMenu = () => {
-    setContextMenu(null);
-  };
-
-  // Get writings grouped
-  const getWritingsInFolder = (folderId: number): Writing[] => {
-    return writings.filter(w => w.folder_id === folderId);
-  };
-
-  const ungroupedWritings = writings.filter(w => w.folder_id == null || w.folder_id === null);
-
-  // Get subfolders for a folder
-  const getSubfolders = (folderId: number | null): Folder[] => {
-    return folders.filter(f => f.parent_id === folderId);
-  };
-
   // Build nested folder structure
-  interface NestedFolder extends Folder {
-    children: NestedFolder[];
-  }
-
   const buildNestedFolders = (parentId: number | null): NestedFolder[] => {
     return folders
       .filter(f => f.parent_id === parentId)
@@ -475,440 +437,119 @@ const Write: React.FC = () => {
   };
 
   const nestedFolders = buildNestedFolders(null);
+  const ungroupedWritings = writings.filter(w => w.folder_id == null);
 
-  // ---- Render helpers ----
-
-  const renderFolderTree = (folder: NestedFolder, depth: number = 0) => {
-    const hasChildren = getWritingsInFolder(folder.id).length > 0 || folder.children.length > 0;
-    
-    return (
-      <div
-        key={folder.id}
-        className={`ws-folder-item${dragOverFolderId === folder.id ? ' drag-over' : ''}${draggingFolderId === folder.id ? ' dragging' : ''}`}
-        draggable
-        onDragStart={(e) => handleFolderDragStart(e, folder.id)}
-        onDragEnd={handleDragEnd}
-        onDragOver={(e) => handleDragOver(e, folder.id)}
-        onDragLeave={handleDragLeave}
-        onDrop={(e) => handleDrop(e, folder.id)}
-        style={{ paddingLeft: depth > 0 ? `${depth * 12}px` : 0 }}
-      >
-        <div className="ws-folder-item-inner">
-          <span
-            className="ws-folder-chevron"
-            onClick={(e) => { e.stopPropagation(); toggleFolder(folder.id); }}
-          >
-            {expandedFolders.includes(folder.id) ? '▼' : '▶'}
-          </span>
-          <svg className="ws-folder-icon" width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <rect x="2" y="4" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-            <path d="M6 4V1M3 4H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-          </svg>
-          {editingFolderId === folder.id ? (
-            <input
-              className="ws-folder-rename-input"
-              value={renameFolderValue}
-              onChange={(e) => setRenameFolderValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCommitRename(folder.id);
-                if (e.key === 'Escape') { setEditingFolderId(null); setRenameFolderValue(''); }
-              }}
-              onBlur={() => handleCommitRename(folder.id)}
-              autoFocus
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <span
-              className="ws-folder-name"
-              onDoubleClick={() => handleStartRename(folder)}
-            >{folder.name}</span>
-          )}
-          <div className="ws-folder-actions">
-            <button
-              className="ws-folder-action-btn"
-              onClick={(e) => { e.stopPropagation(); handleStartRename(folder); }}
-              title="重命名"
-            >&#9998;</button>
-            <button
-              className="ws-folder-action-btn ws-folder-action-del"
-              onClick={(e) => { e.stopPropagation(); setFolderDeleteTarget(folder); }}
-              title="删除文件夹"
-            >&times;</button>
-          </div>
-        </div>
-        {expandedFolders.includes(folder.id) && (folder.children.length > 0 || getWritingsInFolder(folder.id).length > 0) && (
-          <div className="ws-folder-children">
-            {/* Render subfolders */}
-            {folder.children.map(subFolder => renderFolderTree(subFolder, depth + 1))}
-            {/* Render writings in this folder */}
-            {getWritingsInFolder(folder.id).map(w => renderWritingItem(w))}
-          </div>
-        )}
-      </div>
-    );
+  const handleWritingDrop = (targetWriting: Writing) => async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const writingId = draggingWritingRef.current;
+    const folderId = draggingFolderRef.current;
+    if (writingId) {
+      await window.cigeAPI.updateWriting(writingId, { folder_id: targetWriting.folder_id });
+      loadWritings();
+    } else if (folderId) {
+      const targetParentId = targetWriting.folder_id;
+      if (folderId !== targetParentId && !(targetParentId !== null && isDescendantFolder(folderId, targetParentId))) {
+        await window.cigeAPI.moveFolder(folderId, targetParentId);
+        loadFolders();
+      }
+    }
+    handleDragEnd();
   };
 
   const renderWritingItem = (w: Writing) => {
-    if (viewMode === 'list') {
-      return (
-        <div
-          key={w.id}
-          className={`ws-sidebar-item${currentWriting?.id === w.id ? ' active' : ''}${draggingWritingId === w.id ? ' dragging' : ''}`}
-          onClick={() => selectWriting(w)}
-          draggable
-          onDragStart={(e) => handleDragStart(e, w.id)}
-          onDragEnd={handleDragEnd}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.dataTransfer.dropEffect = 'move';
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            // Drop on a writing item: move dragging item to the same folder
-            if (draggingWritingId) {
-              window.cigeAPI.updateWriting(draggingWritingId, { folder_id: w.folder_id }).then(() => {
-                loadWritings();
-              });
-            } else if (draggingFolderId) {
-              // Move folder to the same parent as this writing's folder
-              const targetParentId = w.folder_id;
-              if (draggingFolderId !== targetParentId && !(targetParentId !== null && isDescendantFolder(draggingFolderId, targetParentId))) {
-                window.cigeAPI.moveFolder(draggingFolderId, targetParentId).then(() => {
-                  loadFolders();
-                });
-              }
-            }
-            setDraggingWritingId(null);
-            setDraggingFolderId(null);
-            setDragOverFolderId(null);
-          }}
-          onContextMenu={(e) => handleContextMenu(e, w.id)}
-        >
-          <span className="ws-sidebar-item-title">{w.title || '未命名'}</span>
-          <button
-            className="ws-sidebar-item-del"
-            onClick={(e) => {
-              e.stopPropagation();
-              setDeleteTarget(w);
-            }}
-          >&times;</button>
-        </div>
-      );
-    }
-    // Card view
-    const previewLines = (w.content || '').split('\n').filter(l => l.trim()).slice(0, 2);
     const folder = w.folder_id ? folders.find(f => f.id === w.folder_id) : null;
-    
     return (
-      <div
+      <WritingItem
         key={w.id}
-        className={`ws-sidebar-card${currentWriting?.id === w.id ? ' active' : ''}${draggingWritingId === w.id ? ' dragging' : ''}`}
-        onClick={() => selectWriting(w)}
-        draggable
+        writing={w}
+        viewMode={viewMode}
+        isActive={currentWriting?.id === w.id}
+        isDragging={draggingWritingId === w.id}
+        folderName={folder?.name}
+        onSelect={() => selectWriting(w)}
         onDragStart={(e) => handleDragStart(e, w.id)}
         onDragEnd={handleDragEnd}
-        onDragOver={(e) => {
-          e.preventDefault();
+        onDelete={(e) => {
           e.stopPropagation();
-          e.dataTransfer.dropEffect = 'move';
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (draggingWritingId) {
-            window.cigeAPI.updateWriting(draggingWritingId, { folder_id: w.folder_id }).then(() => {
-              loadWritings();
-            });
-          } else if (draggingFolderId) {
-            const targetParentId = w.folder_id;
-            if (draggingFolderId !== targetParentId && !(targetParentId !== null && isDescendantFolder(draggingFolderId, targetParentId))) {
-              window.cigeAPI.moveFolder(draggingFolderId, targetParentId).then(() => {
-                loadFolders();
-              });
-            }
-          }
-          setDraggingWritingId(null);
-          setDraggingFolderId(null);
-          setDragOverFolderId(null);
+          setDeleteTarget(w);
         }}
         onContextMenu={(e) => handleContextMenu(e, w.id)}
-      >
-        <div className="ws-sidebar-card-preview">
-          {previewLines.length > 0
-            ? previewLines.map((line, i) => <span key={i}>{line}<br /></span>)
-            : <span className="ws-sidebar-card-preview-empty">暂无内容</span>
-          }
-        </div>
-        <div className="ws-sidebar-card-title">
-          <span className="ws-sidebar-card-title-text">{w.title || '未命名'}</span>
-          <button
-            className="ws-sidebar-item-del"
-            onClick={(e) => {
-              e.stopPropagation();
-              setDeleteTarget(w);
-            }}
-          >&times;</button>
-        </div>
-        {folder && (
-          <div className="ws-sidebar-card-meta">
-            <span className="ws-sidebar-card-folder">
-              <svg width="10" height="10" viewBox="0 0 14 14" fill="none">
-                <rect x="2" y="4" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-                <path d="M6 4V1M3 4H11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-              {folder.name}
-            </span>
-          </div>
-        )}
-      </div>
+        onDrop={handleWritingDrop(w)}
+      />
     );
   };
 
-  // Determine sidebar className
-  const sidebarClasses = [
-    'ws-sidebar',
-    sidebarCollapsed ? 'collapsed' : '',
-    viewMode === 'card' && !sidebarCollapsed ? 'ws-sidebar-card-view' : '',
-  ].filter(Boolean).join(' ');
+  const handleInsertMarker = (marker: string) => {
+    setContent((prev) => {
+      const next = prev ? (prev.endsWith('\n') ? prev : prev + '\n') + marker + '\n' : marker + '\n';
+      return next;
+    });
+    contentDirtyRef.current = true;
+    updateSaveStatus('unsaved');
+  };
 
   return (
     <div className="write-workspace-lyric">
-      {/* ---- Toolbar ---- */}
-      <div className="ws-toolbar">
-        <div className="ws-toolbar-left">
-          <button className="ws-btn" onClick={() => {
-            const marker = '[主歌]';
-            setContent(content ? (content.endsWith('\n') ? content : content + '\n') + marker + '\n' : marker + '\n');
-            contentDirtyRef.current = true;
-            updateSaveStatus('unsaved');
-          }} title="插入主歌">[主歌]</button>
-          <button className="ws-btn" onClick={() => {
-            const marker = '[副歌]';
-            setContent(content ? (content.endsWith('\n') ? content : content + '\n') + marker + '\n' : marker + '\n');
-            contentDirtyRef.current = true;
-            updateSaveStatus('unsaved');
-          }} title="插入副歌">[副歌]</button>
-          <button className="ws-btn" onClick={() => {
-            const marker = '[桥段]';
-            setContent(content ? (content.endsWith('\n') ? content : content + '\n') + marker + '\n' : marker + '\n');
-            contentDirtyRef.current = true;
-            updateSaveStatus('unsaved');
-          }} title="插入桥段">[桥段]</button>
-          <button className="ws-btn" onClick={() => {
-            const marker = '[尾奏]';
-            setContent(content ? (content.endsWith('\n') ? content : content + '\n') + marker + '\n' : marker + '\n');
-            contentDirtyRef.current = true;
-            updateSaveStatus('unsaved');
-          }} title="插入尾奏">[尾奏]</button>
+      <WriteToolbar
+        saveStatus={saveStatus}
+        onInsertMarker={handleInsertMarker}
+        onUndo={() => document.execCommand('undo')}
+        onRedo={() => document.execCommand('redo')}
+        onNew={handleNew}
+        onSave={doSave}
+        onOpenSettings={() => setShowSettings(true)}
+      />
 
-        </div>
-
-        <div className="ws-toolbar-right">
-          <button className="ws-btn ws-btn-icon" onClick={() => document.execCommand('undo')} title="撤销">
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-              <path d="M4 3L1 6L4 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M1 6H9A4 4 0 0 1 13 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            </svg>
-          </button>
-          <button className="ws-btn ws-btn-icon" onClick={() => document.execCommand('redo')} title="重做">
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-              <path d="M10 3L13 6L10 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M13 6H5A4 4 0 0 0 1 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-            </svg>
-          </button>
-
-          <span className="ws-divider" />
-
-          <button
-            className="ws-btn ws-btn-icon"
-            onClick={handleNew}
-            title="新建文档"
-          >
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-              <path d="M7 3V11M3 7H11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            <span>新建</span>
-          </button>
-
-          <button
-            className="ws-btn ws-btn-icon"
-            onClick={() => setShowSettings(true)}
-            title="设置"
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              <path d="M13.7 13.7a7.9 7.9 0 0 0 0-11.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-          </button>
-
-          <button
-            className={`ws-btn ws-btn-save${saveStatus === 'saving' ? ' saving' : ''}`}
-            onClick={doSave}
-            title="保存 (Cmd+S)"
-          >
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-              <path d="M11 13V7H3V13" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M3 1H10L13 4V13H1V1H3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-              <path d="M8 1V5H5V1" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-            </svg>
-            <span>保存</span>
-            <span className="ws-shortcut-hint">Cmd+S</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ---- Three-column body ---- */}
       <div className="ws-editor-body">
-        {/* Left: works sidebar */}
-        {sidebarCollapsed ? (
-          <div
-            className="ws-sidebar-collapsed-bar"
-            onMouseEnter={() => {
-              if (justCollapsedRef.current) {
-                justCollapsedRef.current = false;
-                return;
-              }
-              collapseGuardRef.current = setTimeout(() => setSidebarCollapsed(false), 200);
-            }}
-            onMouseLeave={() => {
-              if (collapseGuardRef.current) {
-                clearTimeout(collapseGuardRef.current);
-                collapseGuardRef.current = null;
-              }
-            }}
-          >
-            <button
-              className="ws-sidebar-toggle"
-              onClick={() => setSidebarCollapsed(false)}
-              title="展开侧边栏"
-            >
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                <path d="M5 3L9 7L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-          </div>
-        ) : (
-          <div className={sidebarClasses} style={{ width: `${sidebarWidth}px` }}>
-            {/* Header */}
-            <div className="ws-sidebar-header">
-              <button
-                className="ws-sidebar-toggle"
-                onClick={() => { justCollapsedRef.current = true; setSidebarCollapsed(true); }}
-                title="折叠侧边栏"
-              >
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                  <path d="M9 3L5 7L9 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-              <div className="ws-sidebar-view-toggle">
-                <button
-                  className={`ws-btn ws-btn-icon${viewMode === 'list' ? ' active' : ''}`}
-                  onClick={() => setViewMode('list')}
-                  title="列表视图"
-                >
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                    <path d="M2 3H12M2 7H12M2 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
-                <button
-                  className={`ws-btn ws-btn-icon${viewMode === 'card' ? ' active' : ''}`}
-                  onClick={() => setViewMode('card')}
-                  title="卡片视图"
-                >
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                    <rect x="2" y="2" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-                    <rect x="8" y="2" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-                    <rect x="2" y="8" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-                    <rect x="8" y="8" width="4" height="4" rx="0.5" stroke="currentColor" strokeWidth="1.2"/>
-                  </svg>
-                </button>
-              </div>
-              <button
-                className="ws-btn ws-btn-icon"
-                onClick={handleNew}
-                title="新建文本"
-              >
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                  <path d="M7 3V11M3 7H11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-              </button>
-              <button
-                className="ws-btn ws-btn-icon"
-                onClick={() => {
-                  if (showNewFolderInput) return;
-                  setShowNewFolderInput(true);
-                  setNewFolderName('');
-                }}
-                title="新建文件夹"
-              >
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                  <rect x="3" y="5" width="8" height="6" rx="1" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M7 5V2M5 3H9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
+        <Sidebar
+          sidebarCollapsed={sidebarCollapsed}
+          setSidebarCollapsed={setSidebarCollapsed}
+          sidebarWidth={sidebarWidth}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+          folders={folders}
+          writings={writings}
+          currentWriting={currentWriting}
+          nestedFolders={nestedFolders}
+          ungroupedWritings={ungroupedWritings}
+          expandedFolders={expandedFolders}
+          editingFolderId={editingFolderId}
+          renameFolderValue={renameFolderValue}
+          showNewFolderInput={showNewFolderInput}
+          newFolderName={newFolderName}
+          draggingFolderId={draggingFolderId}
+          draggingWritingId={draggingWritingId}
+          dragOverFolderId={dragOverFolderId}
+          dragOverUngrouped={dragOverUngrouped}
+          isResizing={isResizing}
+          onNew={handleNew}
+          onNewFolderInputShow={() => {
+            if (showNewFolderInput) return;
+            setShowNewFolderInput(true);
+            setNewFolderName('');
+          }}
+          onNewFolderNameChange={setNewFolderName}
+          onCreateFolder={handleCreateFolder}
+          onCancelNewFolder={() => { setShowNewFolderInput(false); setNewFolderName(''); }}
+          onToggleFolder={toggleFolder}
+          onStartRename={handleStartRename}
+          onCommitRename={handleCommitRename}
+          onRenameChange={setRenameFolderValue}
+          onCancelRename={() => { setEditingFolderId(null); setRenameFolderValue(''); }}
+          onDeleteFolder={(folder) => setFolderDeleteTarget(folder)}
+          onDragStartFolder={handleFolderDragStart}
+          onDragEnd={handleDragEnd}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onUngroupedDragOver={handleUngroupedDragOver}
+          onUngroupedDragLeave={handleUngroupedDragLeave}
+          onUngroupedDrop={handleUngroupedDrop}
+          onResizeStart={handleResizeStart}
+          renderWritingItem={renderWritingItem}
+        />
 
-            {/* New folder input */}
-            {showNewFolderInput && (
-              <div className="ws-folder-new-input">
-                <input
-                  className="input"
-                  placeholder="文件夹名称"
-                  value={newFolderName}
-                  onChange={(e) => setNewFolderName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleCreateFolder();
-                    if (e.key === 'Escape') { setShowNewFolderInput(false); setNewFolderName(''); }
-                  }}
-                  onBlur={() => {
-                    if (newFolderName.trim()) handleCreateFolder();
-                    else setShowNewFolderInput(false);
-                  }}
-                  autoFocus
-                />
-              </div>
-            )}
-
-            {/* Works list */}
-            <div className={`ws-sidebar-list${viewMode === 'card' ? ' ws-sidebar-list-card' : ''}`}>
-              {writings.length === 0 && folders.length === 0 ? (
-                <div className="ws-sidebar-empty">暂无作品</div>
-              ) : (
-                <>
-                  {/* Nested folder tree */}
-                  {nestedFolders.map(folder => renderFolderTree(folder))}
-
-                  {/* Ungrouped writings - always show if there are ungrouped items or dragging */}
-                  <div
-                    className={`ws-folder-item${dragOverUngrouped ? ' drag-over' : ''}`}
-                    onDragOver={handleUngroupedDragOver}
-                    onDragLeave={handleUngroupedDragLeave}
-                    onDrop={handleUngroupedDrop}
-                  >
-                    <div className="ws-sidebar-section-label">未归类</div>
-                    <div className="ws-folder-children">
-                      {ungroupedWritings.length === 0 ? (
-                        <div className="ws-folder-empty">拖拽文档或文件夹到这里</div>
-                      ) : (
-                        ungroupedWritings.map(w => renderWritingItem(w))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Sidebar resizer */}
-            <div
-              className={`ws-sidebar-resizer${isResizing ? ' dragging' : ''}`}
-              onMouseDown={handleResizeStart}
-            />
-          </div>
-        )}
-
-        {/* Center: editor */}
         {currentWriting ? (
           <RichEditor
             value={content}
@@ -930,7 +571,6 @@ const Write: React.FC = () => {
           </div>
         )}
 
-        {/* Right: rhyme panel */}
         <MaterialPanel
           rhymeSuggestion={rhymeSuggestion}
           onInsertText={handleInsertText}
@@ -941,9 +581,6 @@ const Write: React.FC = () => {
         />
       </div>
 
-
-
-      {/* ---- Confirm dialog for writing delete ---- */}
       {deleteTarget && (
         <ConfirmDialog
           title="删除作品"
@@ -956,7 +593,6 @@ const Write: React.FC = () => {
         />
       )}
 
-      {/* ---- Confirm dialog for folder delete ---- */}
       {folderDeleteTarget && (
         <ConfirmDialog
           title="删除文件夹"
@@ -966,7 +602,6 @@ const Write: React.FC = () => {
         />
       )}
 
-      {/* ---- Context menu for writings ---- */}
       {contextMenu && (
         <div
           className="ws-context-menu"
@@ -982,7 +617,6 @@ const Write: React.FC = () => {
         </div>
       )}
 
-      {/* ---- Settings panel ---- */}
       {showSettings && (
         <SettingsPanel onClose={() => setShowSettings(false)} />
       )}

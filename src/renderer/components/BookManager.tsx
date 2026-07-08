@@ -19,9 +19,10 @@ interface BookManagerProps {
   onClose: () => void;
   onRefresh: () => void;
   onToast: (message: string) => void;
+  onOpenSourceManager?: () => void;
 }
 
-const BookManager: React.FC<BookManagerProps> = ({ books, onClose, onRefresh, onToast }) => {
+const BookManager: React.FC<BookManagerProps> = ({ books, onClose, onRefresh, onToast, onOpenSourceManager }) => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [editForm, setEditForm] = useState({ title: '', author: '', category: '', tags: '', content: '' });
@@ -111,7 +112,7 @@ const BookManager: React.FC<BookManagerProps> = ({ books, onClose, onRefresh, on
     <div className="modal-overlay" onClick={onClose}>
       <div className="book-manager" onClick={(e) => e.stopPropagation()}>
         <div className="book-manager-header">
-          <h3 className="book-manager-title">书源管理</h3>
+          <h3 className="book-manager-title">书籍管理</h3>
           <button className="book-manager-close" onClick={onClose}>×</button>
         </div>
 
@@ -130,6 +131,11 @@ const BookManager: React.FC<BookManagerProps> = ({ books, onClose, onRefresh, on
           </div>
           <div className="book-manager-actions">
             <span className="book-manager-count">已选 {selectedIds.size} 本</span>
+            {onOpenSourceManager && (
+              <button className="book-manager-btn" onClick={onOpenSourceManager}>
+                书源管理
+              </button>
+            )}
             <button
               className="book-manager-btn danger"
               onClick={handleBatchDelete}

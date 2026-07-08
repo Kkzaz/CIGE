@@ -9,6 +9,7 @@ release
 
 # Environment & secrets
 tools/.redfox_key
+tools/.gemini_key
 tools/.env
 .env
 .env.local
@@ -18,3 +19,4 @@ tools/.env
 .dbg/
 .trae/
 debug-*.md
+tools/rhyme_cache/

@@ -1,16 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
 import StatusBar from './components/StatusBar';
 import SplashScreen from './components/SplashScreen';
-import Write from './pages/Write';
-import Excerpt from './pages/Excerpt';
-import Inspiration from './pages/Inspiration';
-import Library from './pages/Library';
-import RecycleBin from './pages/RecycleBin';
-import Preferences from './pages/Preferences';
 import useStatusBarStore from './store/statusBar';
 import { useAppSettingsStore } from './store/appSettings';
+
+const Write = React.lazy(() => import('./pages/Write'));
+const Excerpt = React.lazy(() => import('./pages/Excerpt'));
+const Inspiration = React.lazy(() => import('./pages/Inspiration'));
+const Library = React.lazy(() => import('./pages/Library'));
+const ReaderPage = React.lazy(() => import('./pages/ReaderPage'));
+const RecycleBin = React.lazy(() => import('./pages/RecycleBin'));
+const Preferences = React.lazy(() => import('./pages/Preferences'));
+
+const PageFallback: React.FC = () => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      height: '100%',
+      color: 'var(--text-secondary)',
+      fontSize: 14,
+    }}
+  >
+    加载中…
+  </div>
+);
 
 console.log('[CiGe App] App component loaded');
 
@@ -25,6 +42,7 @@ const App: React.FC = () => {
   const { charCount, lineCount, rhymeFinals, verseCount, chorusCount, bridgeCount, outroCount, saveStatus } = useStatusBarStore();
 
   const showStatusBar = location.pathname === '/write';
+  const isReader = location.pathname.startsWith('/reader/');
 
   useEffect(() => {
     console.log('[CiGe App] Location changed:', location.pathname);
@@ -42,60 +60,70 @@ const App: React.FC = () => {
   console.log('[CiGe App] Rendering main content');
 
   return (
-    <div className="app-container">
-      <div className="draggable-titlebar" />
-      <main className="main-content">
-        <Routes>
-          <Route path="/" element={<Navigate to="/write" replace />} />
-          <Route
-            path="/write"
-            element={
-              <PageWrapper key="write">
-                <Write />
-              </PageWrapper>
-            }
-          />
-          <Route
-            path="/excerpt"
-            element={
-              <PageWrapper key="excerpt">
-                <Excerpt />
-              </PageWrapper>
-            }
-          />
-          <Route
-            path="/inspiration"
-            element={
-              <PageWrapper key="inspiration">
-                <Inspiration />
-              </PageWrapper>
-            }
-          />
-          <Route
-            path="/library"
-            element={
-              <PageWrapper key="library">
-                <Library />
-              </PageWrapper>
-            }
-          />
-          <Route
-            path="/recycle-bin"
-            element={
-              <PageWrapper key="recycle-bin">
-                <RecycleBin />
-              </PageWrapper>
-            }
-          />
-          <Route
-            path="/preferences"
-            element={
-              <PageWrapper key="preferences">
-                <Preferences />
-              </PageWrapper>
-            }
-          />
-        </Routes>
+    <div className={`app-container${isReader ? ' reader-active' : ''}`}>
+      {!isReader && <div className="draggable-titlebar" />}
+      <main className={`main-content${isReader ? ' main-content-reader' : ''}`}>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/write" replace />} />
+            <Route
+              path="/write"
+              element={
+                <PageWrapper key="write">
+                  <Write />
+                </PageWrapper>
+              }
+            />
+            <Route
+              path="/excerpt"
+              element={
+                <PageWrapper key="excerpt">
+                  <Excerpt />
+                </PageWrapper>
+              }
+            />
+            <Route
+              path="/inspiration"
+              element={
+                <PageWrapper key="inspiration">
+                  <Inspiration />
+                </PageWrapper>
+              }
+            />
+            <Route
+              path="/library"
+              element={
+                <PageWrapper key="library">
+                  <Library />
+                </PageWrapper>
+              }
+            />
+            <Route
+              path="/reader/:bookId"
+              element={
+                <PageWrapper key="reader">
+                  <ReaderPage />
+                </PageWrapper>
+              }
+            />
+            <Route
+              path="/recycle-bin"
+              element={
+                <PageWrapper key="recycle-bin">
+                  <RecycleBin />
+                </PageWrapper>
+              }
+            />
+            <Route
+              path="/preferences"
+              element={
+                <PageWrapper key="preferences">
+                  <Preferences />
+                </PageWrapper>
+              }
+            />
+          </Routes>
+        </Suspense>
       </main>
       {showStatusBar && (
         <StatusBar
@@ -109,7 +137,7 @@ const App: React.FC = () => {
           saveStatus={saveStatus}
         />
       )}
-      <BottomNav />
+      {!isReader && <BottomNav />}
     </div>
   );
 };

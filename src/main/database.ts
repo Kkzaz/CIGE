@@ -103,6 +103,15 @@ export function initDatabase(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_book_chapters_book_id ON book_chapters(book_id);
 
+    CREATE TABLE IF NOT EXISTS book_reading_progress (
+      book_id INTEGER PRIMARY KEY,
+      chapter_id INTEGER NOT NULL DEFAULT 0,
+      scroll_top INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_book_reading_progress_updated ON book_reading_progress(updated_at);
+
     CREATE INDEX IF NOT EXISTS idx_excerpts_tags ON excerpts(tags);
     CREATE INDEX IF NOT EXISTS idx_excerpts_created_at ON excerpts(created_at);
     CREATE INDEX IF NOT EXISTS idx_inspirations_created_at ON inspirations(created_at);
@@ -173,6 +182,28 @@ export function initDatabase(): Database.Database {
   // Migration: create index on folders parent_id
   try {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id)`);
+  } catch {
+    // Index already exists, ignore
+  }
+
+  // Migration: add source metadata columns to books for online book idempotency
+  try {
+    db.exec(`ALTER TABLE books ADD COLUMN source_id INTEGER`);
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`ALTER TABLE books ADD COLUMN source_book_url TEXT`);
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`ALTER TABLE books ADD COLUMN cover_url TEXT`);
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_books_source ON books(source_id, source_book_url)`);
   } catch {
     // Index already exists, ignore
   }

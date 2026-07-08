@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+const initialSettings = ipcRenderer.sendSync('app:get-settings-sync');
+
 const api = {
   // Writings
   getWritings: () => ipcRenderer.invoke('writing:get-all'),
@@ -23,17 +25,40 @@ const api = {
 
   // Inspirations
   getInspirations: () => ipcRenderer.invoke('inspiration:get-all'),
+  getInspirationsByTag: (tagPrefix: string, limit: number, offset: number) =>
+    ipcRenderer.invoke('inspiration:get-by-tag', tagPrefix, limit, offset),
   createInspiration: (data: { content: string; tags: string }) =>
     ipcRenderer.invoke('inspiration:create', data),
   deleteInspiration: (id: number) => ipcRenderer.invoke('inspiration:delete', id),
   fetchMoreHotTrends: () => ipcRenderer.invoke('hot-trends:fetch-more'),
   fetchMoreQuotes: () => ipcRenderer.invoke('quotes:fetch-more'),
+  searchMusicLyrics: (query: string, platform?: string) =>
+    ipcRenderer.invoke('inspiration:search-music-lyrics', query, platform),
+
+  // Gemini chat
+  sendGeminiChat: (message: string, history?: Array<{ role: string; content: string }>) =>
+    ipcRenderer.send('gemini:chat-stream', message, history),
+  onGeminiChatEvent: (
+    callback: (event: { type: 'chunk' | 'done' | 'error'; data?: string }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      event: { type: 'chunk' | 'done' | 'error'; data?: string }
+    ) => callback(event);
+    ipcRenderer.on('gemini:chat-event', handler);
+    return () => {
+      ipcRenderer.removeListener('gemini:chat-event', handler);
+    };
+  },
 
   // Books (Library)
   getBooks: (options?: { category?: string; favorite?: boolean; query?: string; sourceTag?: string }) =>
     ipcRenderer.invoke('book:get-all', options),
   getBookById: (id: number) => ipcRenderer.invoke('book:get-by-id', id),
   getBookChapters: (bookId: number) => ipcRenderer.invoke('book:get-chapters', bookId),
+  getBookReadingProgress: (bookId: number) => ipcRenderer.invoke('book:get-reading-progress', bookId),
+  saveBookReadingProgress: (bookId: number, data: { chapter_id: number; scroll_top: number }) =>
+    ipcRenderer.invoke('book:save-reading-progress', bookId, data),
   toggleBookFavorite: (id: number) => ipcRenderer.invoke('book:toggle-favorite', id),
   createBook: (data: { title: string; author: string; content: string; category?: string; tags?: string; cover?: string; description?: string }) =>
     ipcRenderer.invoke('book:create', data),
@@ -68,21 +93,38 @@ const api = {
     ipcRenderer.invoke('book-source:content', sourceId, chapterUrl),
   importBookFromSource: (sourceId: number, bookUrl: string, chapterLimit?: number) =>
     ipcRenderer.invoke('book-source:import-book', sourceId, bookUrl, chapterLimit),
+  pauseBookImport: (bookId: number) => ipcRenderer.invoke('book-source:pause-import', bookId),
+  resumeBookImport: (bookId: number) => ipcRenderer.invoke('book-source:resume-import', bookId),
+  cancelBookImport: (bookId: number) => ipcRenderer.invoke('book-source:cancel-import', bookId),
+  getBookImportProgress: (bookId: number) => ipcRenderer.invoke('book-source:get-import-progress', bookId),
+  getAllBookImportProgress: () => ipcRenderer.invoke('book-source:get-all-import-progress'),
+  onBookImportProgress: (callback: (progress: { bookId: number; status: string; completed: number; total: number; message?: string }) => void): () => void => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: { bookId: number; status: string; completed: number; total: number; message?: string }) => callback(progress);
+    ipcRenderer.on('book-import:progress', handler);
+    return () => {
+      ipcRenderer.removeListener('book-import:progress', handler);
+    };
+  },
+
+  // Window chrome
+  setReaderActive: (active: boolean) => ipcRenderer.invoke('window:set-reader-active', active),
 
   // App info
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   getAppSettings: () => ipcRenderer.invoke('app:get-settings'),
-  setAppSetting: (key: 'autoSyncOnLaunch' | 'showSplash', value: boolean) => ipcRenderer.invoke('app:set-setting', key, value),
+  setAppSetting: (key: string, value: unknown) => ipcRenderer.invoke('app:set-setting', key, value),
   resetAppSettings: () => ipcRenderer.invoke('app:reset-settings'),
 
   // Auto update
   checkForUpdate: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
-  onUpdateStatus: (callback: (status: string, payload?: unknown) => void) => {
+  onUpdateStatus: (callback: (status: string, payload?: unknown) => void): () => void => {
     const handler = (_event: Electron.IpcRendererEvent, status: string, payload?: unknown) => callback(status, payload);
     ipcRenderer.on('update-status', handler);
-    return () => ipcRenderer.removeListener('update-status', handler);
+    return () => {
+      ipcRenderer.removeListener('update-status', handler);
+    };
   },
 
   // Recycle bin
@@ -100,5 +142,6 @@ const api = {
 };
 
 contextBridge.exposeInMainWorld('cigeAPI', api);
+contextBridge.exposeInMainWorld('__CIGE_INITIAL_SETTINGS__', initialSettings);
 
 export type CigeAPI = typeof api;

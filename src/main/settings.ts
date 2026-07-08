@@ -2,14 +2,45 @@ import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
 
+export type ReaderTheme = 'light' | 'sepia' | 'dark';
+export type ReaderFontFamily = 'serif' | 'sans' | 'system';
+
+export interface GeminiChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface GeminiChatSession {
+  id: string;
+  title: string;
+  messages: GeminiChatMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AppSettings {
   autoSyncOnLaunch: boolean;
   showSplash: boolean;
+  readerFontSize: number;
+  readerLineHeight: number;
+  readerParaSpacing: number;
+  readerTheme: ReaderTheme;
+  readerFontFamily: ReaderFontFamily;
+  geminiChatHistory: GeminiChatMessage[];
+  geminiChats: GeminiChatSession[];
 }
 
 const defaultSettings: AppSettings = {
   autoSyncOnLaunch: true,
   showSplash: true,
+  readerFontSize: 17,
+  readerLineHeight: 1.8,
+  readerParaSpacing: 0.8,
+  readerTheme: 'light',
+  readerFontFamily: 'serif',
+  geminiChatHistory: [],
+  geminiChats: [],
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'app_settings.json');

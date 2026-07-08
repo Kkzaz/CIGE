@@ -43,6 +43,7 @@ export interface BookDetail {
   intro: string;
   coverUrl: string;
   tocUrl: string;
+  kind?: string;
 }
 
 // Simple cookie jar shared within this process
@@ -77,7 +78,13 @@ function setCached<T>(cache: Map<string, CacheEntry<T>>, key: string, data: T): 
   cache.set(key, { data, timestamp: Date.now() });
 }
 
-function parseCharset(source: BookSourceConfig, contentType: string, htmlBuffer?: Buffer): string {
+function parseCharset(source: BookSourceConfig, contentType: string, htmlBuffer?: Buffer, explicitCharset?: string): string {
+  // 0. Explicit request charset
+  if (explicitCharset) {
+    const c = explicitCharset.toLowerCase();
+    if (c === 'gbk' || c === 'gb2312' || c === 'gb18030') return 'gbk';
+    return c;
+  }
   // 1. Explicit source charset
   if (source.charset) {
     const c = source.charset.toLowerCase();
@@ -104,7 +111,7 @@ function parseCharset(source: BookSourceConfig, contentType: string, htmlBuffer?
   return 'utf-8';
 }
 
-function parseHeaders(source: BookSourceConfig): Record<string, string> {
+function parseHeaders(source: BookSourceConfig, extra?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
     'User-Agent': 'Mozilla/5.0 (Linux; Android 9) Mobile Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -117,6 +124,9 @@ function parseHeaders(source: BookSourceConfig): Record<string, string> {
     } catch {
       // ignore invalid header JSON
     }
+  }
+  if (extra) {
+    Object.assign(headers, extra);
   }
   return headers;
 }
@@ -141,18 +151,32 @@ function setCookieForUrl(url: string, setCookieHeader: string | string[] | undef
   }
 }
 
-function fetchText(url: string, source?: BookSourceConfig, timeout = 20000): Promise<string> {
+function fetchText(
+  url: string,
+  source?: BookSourceConfig,
+  timeout = 20000,
+  options?: { method?: string; body?: string; charset?: string; headers?: Record<string, string> }
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith('https:') ? https : http;
-    const headers = source ? parseHeaders(source) : parseHeaders({} as BookSourceConfig);
+    const method = options?.method?.toUpperCase() || 'GET';
+    const headers = source
+      ? parseHeaders(source, options?.headers)
+      : parseHeaders({} as BookSourceConfig, options?.headers);
     if (source?.enabledCookieJar) {
       const cookie = getCookieForUrl(url);
       if (cookie) headers['Cookie'] = cookie;
     }
+    if (method === 'POST' && options?.body && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
+    if (options?.body && !headers['Content-Length']) {
+      headers['Content-Length'] = Buffer.byteLength(options.body).toString();
+    }
 
-    const req = client.get(url, { timeout, headers }, (res) => {
+    const req = client.request(url, { method, timeout, headers }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        fetchText(resolveRelativeUrl(url, res.headers.location), source, timeout).then(resolve).catch(reject);
+        fetchText(resolveRelativeUrl(url, res.headers.location), source, timeout, options).then(resolve).catch(reject);
         return;
       }
       if (res.statusCode && res.statusCode >= 400) {
@@ -167,7 +191,12 @@ function fetchText(url: string, source?: BookSourceConfig, timeout = 20000): Pro
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => {
         const buffer = Buffer.concat(chunks);
-        const charset = parseCharset(source || {} as BookSourceConfig, res.headers['content-type'] || '', buffer);
+        const charset = parseCharset(
+          source || ({} as BookSourceConfig),
+          res.headers['content-type'] || '',
+          buffer,
+          options?.charset
+        );
         try {
           const text = iconv.decode(buffer, charset);
           resolve(text);
@@ -178,6 +207,10 @@ function fetchText(url: string, source?: BookSourceConfig, timeout = 20000): Pro
     });
     req.on('error', reject);
     req.on('timeout', () => reject(new Error('Request timeout')));
+    if (options?.body) {
+      req.write(options.body);
+    }
+    req.end();
   });
 }
 
@@ -337,12 +370,61 @@ async function extractSearchBooks(source: BookSourceConfig, rule: Record<string,
   return results;
 }
 
+function parseSearchUrl(
+  source: BookSourceConfig,
+  template: string,
+  vars: Record<string, string | number>
+): { url: string; method?: string; body?: string; charset?: string; headers?: Record<string, string> } {
+  let urlTemplate = template.trim();
+  let optionsText = '';
+
+  const firstComma = urlTemplate.indexOf(',');
+  if (firstComma > 0) {
+    const maybeOptions = urlTemplate.slice(firstComma + 1).trim();
+    if (maybeOptions.startsWith('{') || maybeOptions.startsWith("'")) {
+      optionsText = maybeOptions;
+      urlTemplate = urlTemplate.slice(0, firstComma).trim();
+    }
+  }
+
+  let resolvedUrl = fillUrlTemplate(urlTemplate, vars);
+  if (!/^https?:\/\//i.test(resolvedUrl) && source.bookSourceUrl) {
+    try {
+      resolvedUrl = new URL(resolvedUrl, source.bookSourceUrl).href;
+    } catch {
+      // keep as is
+    }
+  }
+
+  let options: { method?: string; body?: string; charset?: string; headers?: Record<string, string> } = {};
+  if (optionsText) {
+    try {
+      const normalized = optionsText.replace(/'/g, '"');
+      options = JSON.parse(normalized);
+    } catch {
+      // ignore invalid options
+    }
+  }
+
+  return {
+    url: resolvedUrl,
+    method: options.method,
+    body: options.body ? fillUrlTemplate(options.body, vars) : undefined,
+    charset: options.charset,
+    headers: options.headers,
+  };
+}
+
 export async function searchBySource(source: BookSourceConfig, keyword: string): Promise<SearchBook[]> {
   const rule = source.ruleSearch || {};
-  if (!rule.url || !rule.bookList) return [];
+  const searchUrlTemplate = rule.url || source.searchUrl;
+  if (!searchUrlTemplate || !rule.bookList) return [];
 
-  const searchUrl = fillUrlTemplate(rule.url, { key: keyword, page: 1 });
-  const html = await fetchText(searchUrl, source);
+  const { url: searchUrl, method, body, charset, headers } = parseSearchUrl(source, searchUrlTemplate, {
+    key: keyword,
+    page: 1,
+  });
+  const html = await fetchText(searchUrl, source, 20000, { method, body, charset, headers });
   return extractSearchBooks(source, rule, searchUrl, html);
 }
 
@@ -595,8 +677,8 @@ export async function searchAllSources(sources: BookSourceConfig[], keyword: str
         if (books.length > 0) {
           results.push({ sourceName: source.bookSourceName, books });
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error(`[bookSourceEngine] search failed for "${source.bookSourceName}":`, err instanceof Error ? err.message : String(err));
       }
     })
   );
@@ -638,51 +720,141 @@ export async function getBookDetail(source: BookSourceConfig, bookUrl: string): 
     if (img) coverUrl = resolveRelativeUrl(baseUrl, img);
   }
 
+  let kind = extractField($, $('body') as any, rule.kind || '', baseUrl);
+  if (!kind) {
+    kind = $('.kind, .category, [class*="kind"], [class*="category"], [class*="tag"]').first().text().trim();
+  }
+  if (kind) {
+    kind = kind.replace(/^分类[：:]?\s*|^类别[：:]?\s*|^类型[：:]?\s*/i, '').trim();
+  }
+
   let tocUrl = extractField($, $('body') as any, rule.tocUrl || '', baseUrl);
   if (!tocUrl) {
-    const readLink = $('.read, [class*="read"], a[href*="read"], a[href*="list"]').first().attr('href');
-    if (readLink) tocUrl = resolveRelativeUrl(baseUrl, readLink);
+    const tocSelectors = [
+      '.read a', '.read',
+      'a[href*="read"]', 'a[href*="list"]',
+      'a[href*="catalog"]', 'a[href*="dir"]',
+      'a[href*="mulu"]', 'a[href*="chapterlist"]',
+      'a[href*="index"]',
+      '.catalog a', '.mulu a', '.directory a',
+      '.chapter-list a', '.chapters a',
+      '#list a', '.list a',
+    ];
+    for (const sel of tocSelectors) {
+      const href = $(sel).first().attr('href');
+      if (href) {
+        tocUrl = resolveRelativeUrl(baseUrl, href);
+        break;
+      }
+    }
+  }
+  if (!tocUrl) {
+    // 按链接文本匹配目录关键词，优先级从高到低
+    const tocPatterns = [
+      /^(全部章节|章节目录|作品目录|小说目录|目录)$/,
+      /^(开始阅读|全文阅读|在线阅读|立即阅读|点击阅读)$/,
+      /目录|阅读|书库|列表/,
+    ];
+    $('a').each((_i, el) => {
+      if (tocUrl) return false;
+      const $el = $(el);
+      const text = $el.text().trim();
+      const href = $el.attr('href');
+      if (!href) return;
+      for (const pattern of tocPatterns) {
+        if (pattern.test(text)) {
+          tocUrl = resolveRelativeUrl(baseUrl, href);
+          return false;
+        }
+      }
+    });
   }
   if (!tocUrl) tocUrl = bookUrl;
 
-  return { name, author, intro, coverUrl, tocUrl };
+  return { name, author, intro, coverUrl, tocUrl, kind };
 }
 
 export async function getChapterList(source: BookSourceConfig, tocUrl: string): Promise<Chapter[]> {
   const rule = source.ruleToc || {};
+  const seen = new Set<string>();
+  const chapters: Chapter[] = [];
+  const maxPages = 20;
+  const maxChapters = 9999;
 
-  const html = await fetchText(tocUrl, source);
-  const $ = cheerio.load(html);
-  const baseUrl = tocUrl;
+  async function fetchPage(pageUrl: string): Promise<{
+    chapters: Chapter[];
+    nextUrl?: string;
+  }> {
+    const html = await fetchText(pageUrl, source);
+    const $ = cheerio.load(html);
+    const baseUrl = pageUrl;
 
-  const candidateSelectors = rule.chapterList
-    ? [rule.chapterList]
-    : [
-        '#list dd a', '#list dt a',
-        '.chapterlist li a', '.chapter-list li a', '.chapterList li a',
-        '#mlist li a', '.catalog li a', '.mulu li a',
-        '.chapter-item a', '.chapterItem a', '.chapter a',
-        '#chapterlist a', '#chapterList a', '#readerlists a',
-        'dl a', '.panel-body a', '.list-group a',
-        '.ccss a', '#xsdsxscsaa a', '#xsdsxscsa a',
-        'a[href*="read"]', 'a[href*="chapter"]',
-      ];
+    const candidateSelectors = rule.chapterList
+      ? [rule.chapterList]
+      : [
+          '#list dd a', '#list dt a',
+          '.chapterlist li a', '.chapter-list li a', '.chapterList li a',
+          '#mlist li a', '.catalog li a', '.mulu li a',
+          '.chapter-item a', '.chapterItem a', '.chapter a',
+          '#chapterlist a', '#chapterList a', '#readerlists a',
+          'dl a', '.panel-body a', '.list-group a',
+          '.ccss a', '#xsdsxscsaa a', '#xsdsxscsa a',
+          'a[href*="read"]', 'a[href*="chapter"]',
+        ];
 
-  for (const selector of candidateSelectors) {
-    const list = safeQuery($, selector);
-    if (!list) continue;
-    const items = list.toArray();
-    const chapters: Chapter[] = [];
-    for (const item of items) {
-      const $item = $(item);
-      const title = extractField($, $item, rule.chapterName || 'a@text', baseUrl);
-      const url = extractField($, $item, rule.chapterUrl || 'a@href', baseUrl);
-      if (!title || !url) continue;
-      chapters.push({ title, url });
+    for (const selector of candidateSelectors) {
+      const list = safeQuery($, selector);
+      if (!list) continue;
+      const items = list.toArray();
+      const pageChapters: Chapter[] = [];
+      for (const item of items) {
+        const $item = $(item);
+        const title = extractField($, $item, rule.chapterName || 'a@text', baseUrl);
+        const url = extractField($, $item, rule.chapterUrl || 'a@href', baseUrl);
+        if (!title || !url) continue;
+        pageChapters.push({ title, url });
+      }
+      if (pageChapters.length > 0) {
+        let nextUrl: string | undefined;
+        if (rule.nextPage) {
+          nextUrl = extractField($, $('body') as any, rule.nextPage, baseUrl);
+          if (nextUrl === pageUrl || nextUrl === tocUrl) nextUrl = undefined;
+        }
+        return { chapters: pageChapters, nextUrl };
+      }
     }
-    if (chapters.length > 0) return chapters.slice(0, 500);
+    return { chapters: [] };
   }
-  return [];
+
+  // 1. 先抓取主目录页
+  let currentUrl: string | undefined = tocUrl;
+  for (let pageIndex = 0; pageIndex < maxPages && currentUrl; pageIndex++) {
+    try {
+      const result = await fetchPage(currentUrl);
+      const beforeCount = chapters.length;
+      for (const ch of result.chapters) {
+        if (seen.has(ch.url)) continue;
+        seen.add(ch.url);
+        chapters.push(ch);
+        if (chapters.length >= maxChapters) break;
+      }
+      if (chapters.length >= maxChapters) break;
+
+      // 本页没有新章节，说明已到最后一页
+      if (chapters.length === beforeCount) {
+        currentUrl = undefined;
+      } else if (result.nextUrl) {
+        currentUrl = result.nextUrl;
+      } else {
+        currentUrl = undefined;
+      }
+    } catch (err) {
+      console.warn(`[bookSourceEngine] 目录分页失败 ${currentUrl}:`, err instanceof Error ? err.message : String(err));
+      break;
+    }
+  }
+
+  return chapters.slice(0, maxChapters);
 }
 
 export async function getChapterContent(source: BookSourceConfig, chapterUrl: string): Promise<string> {

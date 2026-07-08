@@ -1,85 +1,161 @@
 import { create } from 'zustand';
 
+export type ReaderTheme = 'light' | 'sepia' | 'dark';
+export type ReaderFontFamily = 'serif' | 'sans' | 'system';
+
 export interface AppSettings {
   autoSyncOnLaunch: boolean;
   showSplash: boolean;
+  readerFontSize: number;
+  readerLineHeight: number;
+  readerParaSpacing: number;
+  readerTheme: ReaderTheme;
+  readerFontFamily: ReaderFontFamily;
+  readerReadingSpeed: number;
+  readerAutoEnterImmersive: boolean;
+
   setAutoSyncOnLaunch: (value: boolean) => void;
   setShowSplash: (value: boolean) => void;
+  setReaderFontSize: (value: number) => void;
+  setReaderLineHeight: (value: number) => void;
+  setReaderParaSpacing: (value: number) => void;
+  setReaderTheme: (value: ReaderTheme) => void;
+  setReaderFontFamily: (value: ReaderFontFamily) => void;
+  setReaderReadingSpeed: (value: number) => void;
+  setReaderAutoEnterImmersive: (value: boolean) => void;
   reset: () => void;
 }
 
-const STORAGE_KEY = 'cige_app_settings';
-
-const defaultSettings: Omit<AppSettings, 'setAutoSyncOnLaunch' | 'setShowSplash' | 'reset'> = {
+const defaultSettings: Omit<
+  AppSettings,
+  | 'setAutoSyncOnLaunch'
+  | 'setShowSplash'
+  | 'setReaderFontSize'
+  | 'setReaderLineHeight'
+  | 'setReaderParaSpacing'
+  | 'setReaderTheme'
+  | 'setReaderFontFamily'
+  | 'setReaderReadingSpeed'
+  | 'setReaderAutoEnterImmersive'
+  | 'reset'
+> = {
   autoSyncOnLaunch: true,
   showSplash: true,
+  readerFontSize: 18,
+  readerLineHeight: 1.8,
+  readerParaSpacing: 0.8,
+  readerTheme: 'light',
+  readerFontFamily: 'serif',
+  readerReadingSpeed: 500,
+  readerAutoEnterImmersive: false,
 };
 
 const hasMainAPI = typeof window !== 'undefined' && window.cigeAPI && typeof window.cigeAPI.getAppSettings === 'function';
 
-const loadSettings = (): typeof defaultSettings => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { ...defaultSettings, ...parsed };
-    }
-  } catch (e) {
-    console.error('Failed to load app settings:', e);
+const loadInitialSettings = () => {
+  if (typeof window !== 'undefined' && window.__CIGE_INITIAL_SETTINGS__) {
+    return { ...defaultSettings, ...window.__CIGE_INITIAL_SETTINGS__ };
   }
   return { ...defaultSettings };
 };
 
-const saveSettings = (settings: typeof defaultSettings) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch (e) {
-    console.error('Failed to save app settings:', e);
-  }
-};
+const initialSettings = loadInitialSettings();
 
-const syncToMain = (settings: typeof defaultSettings) => {
-  if (!hasMainAPI) return;
-  window.cigeAPI.setAppSetting('autoSyncOnLaunch', settings.autoSyncOnLaunch);
-  window.cigeAPI.setAppSetting('showSplash', settings.showSplash);
-};
-
-const initialSettings = loadSettings();
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 export const useAppSettingsStore = create<AppSettings>((set) => ({
   ...initialSettings,
   setAutoSyncOnLaunch: (value) => {
     set((state) => {
       const newState = { ...state, autoSyncOnLaunch: value };
-      saveSettings({ autoSyncOnLaunch: newState.autoSyncOnLaunch, showSplash: newState.showSplash });
-      syncToMain({ autoSyncOnLaunch: newState.autoSyncOnLaunch, showSplash: newState.showSplash });
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('autoSyncOnLaunch', newState.autoSyncOnLaunch);
+      }
       return newState;
     });
   },
   setShowSplash: (value) => {
     set((state) => {
       const newState = { ...state, showSplash: value };
-      saveSettings({ autoSyncOnLaunch: newState.autoSyncOnLaunch, showSplash: newState.showSplash });
-      syncToMain({ autoSyncOnLaunch: newState.autoSyncOnLaunch, showSplash: newState.showSplash });
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('showSplash', newState.showSplash);
+      }
+      return newState;
+    });
+  },
+  setReaderFontSize: (value) => {
+    set((state) => {
+      const next = clamp(value, 12, 28);
+      const newState = { ...state, readerFontSize: next };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerFontSize', next);
+      }
+      return newState;
+    });
+  },
+  setReaderLineHeight: (value) => {
+    set((state) => {
+      const next = clamp(value, 1.2, 2.5);
+      const newState = { ...state, readerLineHeight: next };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerLineHeight', next);
+      }
+      return newState;
+    });
+  },
+  setReaderParaSpacing: (value) => {
+    set((state) => {
+      const next = clamp(value, 0, 2);
+      const newState = { ...state, readerParaSpacing: next };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerParaSpacing', next);
+      }
+      return newState;
+    });
+  },
+  setReaderTheme: (value) => {
+    set((state) => {
+      const newState = { ...state, readerTheme: value };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerTheme', value);
+      }
+      return newState;
+    });
+  },
+  setReaderFontFamily: (value) => {
+    set((state) => {
+      const newState = { ...state, readerFontFamily: value };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerFontFamily', value);
+      }
+      return newState;
+    });
+  },
+  setReaderReadingSpeed: (value) => {
+    set((state) => {
+      const next = clamp(value, 100, 2000);
+      const newState = { ...state, readerReadingSpeed: next };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerReadingSpeed', next);
+      }
+      return newState;
+    });
+  },
+  setReaderAutoEnterImmersive: (value) => {
+    set((state) => {
+      const newState = { ...state, readerAutoEnterImmersive: value };
+      if (hasMainAPI) {
+        window.cigeAPI.setAppSetting('readerAutoEnterImmersive', value);
+      }
       return newState;
     });
   },
   reset: () => {
-    saveSettings(defaultSettings);
-    syncToMain(defaultSettings);
     if (hasMainAPI) {
       window.cigeAPI.resetAppSettings();
     }
     set(defaultSettings);
   },
 }));
-
-// Sync settings from main process on startup to handle cases where settings were changed externally
-if (hasMainAPI) {
-  window.cigeAPI.getAppSettings().then((settings) => {
-    const s = settings as typeof defaultSettings;
-    const merged = { ...defaultSettings, ...s };
-    saveSettings(merged);
-    useAppSettingsStore.setState(merged);
-  });
-}

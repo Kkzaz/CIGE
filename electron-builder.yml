@@ -9,7 +9,11 @@ directories:
 files:
   - dist/**/*
   - node_modules/**/*
+  - tools/**/*
   - package.json
+
+asarUnpack:
+  - tools/**/*
 
 mac:
   category: public.app-category.productivity

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import BookSourcePreview from './BookSourcePreview';
 
 interface BookSource {
   id: number;
@@ -26,7 +28,7 @@ interface SearchGroup {
 interface OnlineSearchProps {
   onClose: () => void;
   onToast: (message: string) => void;
-  onImport: () => void;
+  onImport: (bookId: number) => void;
   initialSourceId?: number;
 }
 
@@ -36,7 +38,8 @@ const OnlineSearch: React.FC<OnlineSearchProps> = ({ onClose, onToast, onImport,
   const [keyword, setKeyword] = useState('');
   const [groups, setGroups] = useState<SearchGroup[]>([]);
   const [loading, setLoading] = useState(false);
-  const [importingUrl, setImportingUrl] = useState<string | null>(null);
+  const [previewBook, setPreviewBook] = useState<SearchBook | null>(null);
+  const [previewSourceId, setPreviewSourceId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSources();
@@ -98,25 +101,23 @@ const OnlineSearch: React.FC<OnlineSearchProps> = ({ onClose, onToast, onImport,
     }
   };
 
-  const handleImport = async (book: SearchBook, groupSourceId?: number) => {
+  const openPreview = (book: SearchBook, groupSourceId?: number) => {
     const sid = groupSourceId || (sourceId !== 'all' ? Number(sourceId) : undefined);
     if (!sid) {
       onToast('无法确定书源，请从单书源搜索结果导入');
       return;
     }
-    setImportingUrl(book.bookUrl);
-    try {
-      await window.cigeAPI.importBookFromSource(sid, book.bookUrl, 50);
-      onToast(`《${book.name}》已导入图书馆`);
-      onImport();
-    } catch (err) {
-      onToast(err instanceof Error ? err.message : '导入失败');
-    } finally {
-      setImportingUrl(null);
-    }
+    setPreviewSourceId(sid);
+    setPreviewBook(book);
   };
 
-  return (
+  const handlePreviewImport = (bookId: number) => {
+    setPreviewBook(null);
+    setPreviewSourceId(null);
+    onImport(bookId);
+  };
+
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="online-search" onClick={(e) => e.stopPropagation()}>
         <div className="online-search-header">
@@ -162,7 +163,11 @@ const OnlineSearch: React.FC<OnlineSearchProps> = ({ onClose, onToast, onImport,
             <div key={group.sourceName} className="online-search-group">
               <div className="online-search-group-title">{group.sourceName}</div>
               {group.books.map((book) => (
-                <div key={book.bookUrl} className="online-search-result">
+                <div
+                  key={book.bookUrl}
+                  className="online-search-result"
+                  onClick={() => openPreview(book, group.sourceId)}
+                >
                   <div className="online-search-result-cover" style={{ background: book.coverUrl ? `url(${book.coverUrl}) center/cover` : '#D4C4A8' }} />
                   <div className="online-search-result-info">
                     <div className="online-search-result-name">{book.name}</div>
@@ -171,10 +176,12 @@ const OnlineSearch: React.FC<OnlineSearchProps> = ({ onClose, onToast, onImport,
                   </div>
                   <button
                     className="online-search-import-btn"
-                    onClick={() => handleImport(book, group.sourceId)}
-                    disabled={importingUrl === book.bookUrl}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPreview(book, group.sourceId);
+                    }}
                   >
-                    {importingUrl === book.bookUrl ? '导入中...' : '导入'}
+                    查看
                   </button>
                 </div>
               ))}
@@ -182,7 +189,20 @@ const OnlineSearch: React.FC<OnlineSearchProps> = ({ onClose, onToast, onImport,
           ))}
         </div>
       </div>
-    </div>
+      {previewBook && previewSourceId && (
+        <BookSourcePreview
+          sourceId={previewSourceId}
+          book={previewBook}
+          onClose={() => {
+            setPreviewBook(null);
+            setPreviewSourceId(null);
+          }}
+          onImport={handlePreviewImport}
+          onToast={onToast}
+        />
+      )}
+    </div>,
+    document.body
   );
 };
 

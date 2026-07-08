@@ -21,6 +21,7 @@
 """
 
 import os
+import re
 import json
 import time
 import urllib.request
@@ -596,6 +597,464 @@ def fetch_hot_trends(platforms=None, source="auto", skip_cache=False):
     return payload
 
 
+# ==================== 歌词查重（网易云音乐） ====================
+
+_netease_opener = None
+
+
+def _get_netease_opener():
+    """维护一个带 CookieJar 的 opener，用于网易云请求，减少被拦截概率。"""
+    global _netease_opener
+    if _netease_opener is None:
+        cj = urllib.request.HTTPCookieProcessor()
+        https_handler = urllib.request.HTTPSHandler(context=ssl_context)
+        _netease_opener = urllib.request.build_opener(https_handler, cj)
+    return _netease_opener
+
+
+def _netease_get_json(url: str, extra_headers: dict = None):
+    """网易云 JSON GET，复用同一 opener 会话。"""
+    req_headers = {**headers}
+    if extra_headers:
+        req_headers.update(extra_headers)
+    req = urllib.request.Request(url, headers=req_headers)
+    opener = _get_netease_opener()
+    _polite_delay()
+    with opener.open(req, timeout=15) as res:
+        return json.loads(res.read().decode("utf-8", errors="ignore"))
+
+
+def _clean_lyric_text(raw: str) -> str:
+    """去除 LRC 时间戳，返回纯歌词文本。"""
+    if not raw:
+        return ""
+    lines = []
+    for line in raw.split("\n"):
+        line = re.sub(r"\[\d{2}:\d{2}\.\d+\]", "", line).strip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _normalize_netease_songs(raw_songs: list, limit: int):
+    """把不同接口返回的歌曲数据标准化为统一字段结构。"""
+    songs = []
+    for item in raw_songs[:limit]:
+        if not isinstance(item, dict):
+            continue
+        song_id = item.get("id") or item.get("songId")
+        if not song_id:
+            continue
+        name = item.get("name", "")
+        artists = item.get("artists", []) or item.get("ar", []) or []
+        album = item.get("album", {}) or item.get("al", {}) or {}
+        if isinstance(artists, dict):
+            artists = [artists]
+        if isinstance(album, dict):
+            album = {"name": album.get("name", "")}
+        songs.append({
+            "id": int(song_id),
+            "name": name,
+            "artists": artists,
+            "album": album,
+        })
+    return songs
+
+
+def fetch_netease_search_api(query: str, limit: int = 20):
+    """调用网易云公开搜索 API 获取歌曲列表。"""
+    url = f"https://music.163.com/api/search/get/web?csrf_token=&hlpretag=&hlposttag=&s={urllib.parse.quote(query)}&type=1&offset=0&total=true&limit={limit}"
+    extra = {
+        "Referer": "https://music.163.com/",
+        "Origin": "https://music.163.com",
+    }
+    try:
+        data = _netease_get_json(url, extra)
+        result = data.get("result", {})
+        return result.get("songs", [])
+    except Exception as e:
+        print(f"[WARN] 网易云 API 搜索失败 '{query}': {e}")
+        return []
+
+
+def fetch_netease_search_cloud(query: str, limit: int = 15):
+    """调用网易云 cloudsearch 接口作为搜索降级。"""
+    url = f"https://music.163.com/api/cloudsearch/pc?s={urllib.parse.quote(query)}&type=1&offset=0&total=true&limit={limit}"
+    extra = {
+        "Referer": "https://music.163.com/",
+        "Origin": "https://music.163.com",
+    }
+    try:
+        data = _netease_get_json(url, extra)
+        songs = data.get("result", {}).get("songs", [])
+        return _normalize_netease_songs(songs, limit)
+    except Exception as e:
+        print(f"[WARN] 网易云 cloudsearch 搜索失败 '{query}': {e}")
+        return []
+
+
+def fetch_netease_search(query: str, limit: int = 20):
+    """优先调用 search API，失败或结果为空时降级到 cloudsearch。"""
+    songs = fetch_netease_search_api(query, limit)
+    if songs:
+        return songs
+    return fetch_netease_search_cloud(query, limit)
+
+
+def _extract_lyric_from_response(data: dict) -> str:
+    """从歌词接口响应中提取有效歌词文本，处理无歌词/未收录情况。"""
+    if not isinstance(data, dict):
+        return ""
+    if data.get("nolyric") or data.get("uncollected"):
+        return ""
+    for key in ("lrc", "klyric", "tlyric"):
+        segment = data.get(key, {})
+        if isinstance(segment, dict):
+            text = segment.get("lyric", "")
+            if text:
+                return _clean_lyric_text(text)
+    return ""
+
+
+def fetch_netease_lyric_api(song_id: int):
+    """调用网易云公开歌词 API。"""
+    url = f"https://music.163.com/api/song/lyric?id={song_id}&lv=-1"
+    extra = {
+        "Referer": "https://music.163.com/",
+        "Origin": "https://music.163.com",
+    }
+    try:
+        data = _netease_get_json(url, extra)
+        return _extract_lyric_from_response(data)
+    except Exception as e:
+        print(f"[WARN] 网易云 API 歌词获取失败 {song_id}: {e}")
+        return ""
+
+
+def fetch_netease_lyric_alt(song_id: int):
+    """使用 kv/tv 参数再次请求歌词接口，作为降级方案。"""
+    url = f"https://music.163.com/api/song/lyric?id={song_id}&lv=-1&kv=-1&tv=-1"
+    extra = {
+        "Referer": "https://music.163.com/",
+        "Origin": "https://music.163.com",
+    }
+    try:
+        data = _netease_get_json(url, extra)
+        return _extract_lyric_from_response(data)
+    except Exception as e:
+        print(f"[WARN] 网易云歌词接口(kv/tv)失败 {song_id}: {e}")
+        return ""
+
+
+def fetch_netease_lyric(song_id: int):
+    """优先调用标准歌词 API，空歌词或失败时尝试 kv/tv 接口。"""
+    lyric = fetch_netease_lyric_api(song_id)
+    if lyric:
+        return lyric
+    return fetch_netease_lyric_alt(song_id)
+
+
+def _lyric_similarity(query: str, lyric: str):
+    """简单相似度：先检查是否包含查询子串，再计算最长公共子串占比。"""
+    if not query or not lyric:
+        return 0.0, ""
+    query_norm = query.strip().lower().replace(" ", "")
+    lyric_norm = lyric.lower().replace(" ", "")
+
+    # 直接包含：相似度 1.0，返回匹配行
+    if query_norm in lyric_norm:
+        for line in lyric.split("\n"):
+            if query_norm in line.lower().replace(" ", ""):
+                return 1.0, line.strip()
+        return 1.0, lyric[:120].strip()
+
+    # 最长公共子串
+    m, n = len(query_norm), len(lyric_norm)
+    if m == 0 or n == 0:
+        return 0.0, ""
+    longest = 0
+    end_idx = 0
+    # 限制长度避免 O(n*m) 过大
+    max_lyric_len = min(n, 5000)
+    dp = [0] * (max_lyric_len + 1)
+    for i in range(1, m + 1):
+        prev = 0
+        for j in range(1, max_lyric_len + 1):
+            temp = dp[j]
+            if query_norm[i - 1] == lyric_norm[j - 1]:
+                dp[j] = prev + 1
+                if dp[j] > longest:
+                    longest = dp[j]
+                    end_idx = j
+            else:
+                dp[j] = 0
+            prev = temp
+    if longest <= 1:
+        return 0.0, ""
+    similarity = longest / m
+    matched = lyric_norm[end_idx - longest:end_idx]
+    # 在原始歌词中找回完整片段
+    try:
+        start = lyric_norm.index(matched)
+        end = start + longest
+        # 扩展一点上下文
+        context_start = max(0, start - 5)
+        context_end = min(len(lyric_norm), end + 5)
+        matched_lyric = lyric[context_start:context_end]
+    except Exception:
+        matched_lyric = matched
+    return min(similarity, 0.99), matched_lyric
+
+
+def search_netease_music(query: str):
+    """搜索网易云歌曲并匹配相似歌词。"""
+    songs = fetch_netease_search(query, limit=15)
+    results = []
+    seen_ids = set()
+    for song in songs:
+        song_id = song.get("id")
+        if not song_id or song_id in seen_ids:
+            continue
+        seen_ids.add(song_id)
+        lyric = fetch_netease_lyric(song_id)
+        if not lyric:
+            continue
+        similarity, matched = _lyric_similarity(query, lyric)
+        if similarity < 0.3:
+            continue
+        artists = song.get("artists", [])
+        artist_name = ", ".join([a.get("name", "") for a in artists if a.get("name")])
+        album = song.get("album", {})
+        results.append({
+            "songId": song_id,
+            "name": song.get("name", ""),
+            "artist": artist_name,
+            "album": album.get("name", "") if isinstance(album, dict) else "",
+            "similarity": round(similarity, 2),
+            "matchedLyric": matched,
+            "fullLyric": lyric,
+        })
+        if len(results) >= 10:
+            break
+    results.sort(key=lambda x: x["similarity"], reverse=True)
+    return {
+        "success": True,
+        "platform": "netease",
+        "query": query,
+        "count": len(results),
+        "results": results,
+    }
+
+
+# ==================== 社媒检索（抖音/小红书） ====================
+
+def fetch_douyin_search(query: str, count: int = 10):
+    """
+    尝试抓取抖音网页搜索结果。
+    抖音搜索页会嵌入 RENDER_DATA JSON，解析其中视频列表。
+    """
+    url = f"https://www.douyin.com/search/{urllib.parse.quote(query)}"
+    extra = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Referer": "https://www.douyin.com/",
+    }
+    _polite_delay()
+    try:
+        req = urllib.request.Request(url, headers={**headers, **extra})
+        with urllib.request.urlopen(req, timeout=15, context=ssl_context) as res:
+            html = res.read().decode("utf-8", errors="ignore")
+    except Exception as e:
+        print(f"[WARN] 抖音搜索页请求失败 '{query}': {e}")
+        return []
+
+    # 尝试从 <script id="RENDER_DATA"> 提取 JSON
+    try:
+        m = re.search(r'<script[^>]*id="RENDER_DATA"[^>]*>(.*?)</script>', html, re.S)
+        if m:
+            raw = urllib.parse.unquote(m.group(1))
+            data = json.loads(raw)
+            # 结构较深且可能变化，尝试常见路径
+            aweme_list = []
+            for key in ["aweme", "generalList", "searchList", "data"]:
+                if isinstance(data, dict):
+                    data = data.get(key, data)
+            if isinstance(data, list):
+                aweme_list = data
+            elif isinstance(data, dict):
+                for key in ["aweme_list", "awemes", "data", "list"]:
+                    val = data.get(key)
+                    if isinstance(val, list):
+                        aweme_list = val
+                        break
+
+            results = []
+            for item in aweme_list[:count]:
+                if not isinstance(item, dict):
+                    continue
+                aweme_info = item.get("aweme_info") or item
+                desc = aweme_info.get("desc", "") or aweme_info.get("title", "")
+                author = aweme_info.get("author", {}) or {}
+                author_name = author.get("nickname", "") if isinstance(author, dict) else ""
+                aweme_id = aweme_info.get("aweme_id", "")
+                stats = aweme_info.get("statistics", {}) or {}
+                results.append({
+                    "id": str(aweme_id),
+                    "title": desc[:80],
+                    "content": desc,
+                    "author": author_name,
+                    "likes": int(stats.get("digg_count", 0)) if stats else 0,
+                    "link": f"https://www.douyin.com/video/{aweme_id}" if aweme_id else "",
+                })
+            return results
+    except Exception as e:
+        print(f"[WARN] 抖音搜索结果解析失败 '{query}': {e}")
+    return []
+
+
+def fetch_douyin_comments(aweme_id: str, count: int = 20):
+    """尝试获取抖音视频评论。"""
+    url = f"https://www.douyin.com/aweme/v1/web/comment/list/?aweme_id={aweme_id}&cursor=0&count={count}&item_type=0"
+    extra = {
+        "Accept": "application/json",
+        "Referer": f"https://www.douyin.com/video/{aweme_id}",
+    }
+    _polite_delay()
+    try:
+        data = _http_get_json(url, extra)
+        comments = data.get("comments", [])
+        results = []
+        for c in comments[:count]:
+            user = c.get("user", {}) or {}
+            results.append({
+                "id": str(c.get("cid", "")),
+                "title": "",
+                "content": c.get("text", ""),
+                "author": user.get("nickname", "") if isinstance(user, dict) else "",
+                "likes": int(c.get("digg_count", 0)),
+                "link": f"https://www.douyin.com/video/{aweme_id}",
+            })
+        return results
+    except Exception as e:
+        print(f"[WARN] 抖音评论获取失败 {aweme_id}: {e}")
+        return []
+
+
+def fetch_xiaohongshu_search(query: str, count: int = 10):
+    """
+    尝试抓取小红书网页搜索结果。
+    小红书接口需要签名头，未登录时经常受限；这里做 best-effort。
+    """
+    url = "https://www.xiaohongshu.com/api/sns/web/v1/search/notes"
+    params = {
+        "keyword": query,
+        "page": 1,
+        "page_size": count,
+        "sort": "general",
+        "note_type": 0,
+    }
+    full_url = f"{url}?{urllib.parse.urlencode(params)}"
+    extra = {
+        "Accept": "application/json, text/plain, */*",
+        "Referer": "https://www.xiaohongshu.com/search_result",
+        "Origin": "https://www.xiaohongshu.com",
+    }
+    _polite_delay()
+    try:
+        data = _http_get_json(full_url, extra)
+        items = data.get("data", {}).get("items", [])
+        results = []
+        for item in items[:count]:
+            note = item.get("note", {}) or item
+            note_id = note.get("id", "")
+            title = note.get("title", "") or note.get("display_title", "")
+            desc = note.get("desc", "") or title
+            user = note.get("user", {}) or {}
+            results.append({
+                "id": str(note_id),
+                "title": title[:80],
+                "content": desc,
+                "author": user.get("nickname", "") if isinstance(user, dict) else "",
+                "likes": int(note.get("likes", 0)) if note.get("likes") else 0,
+                "link": f"https://www.xiaohongshu.com/explore/{note_id}" if note_id else "",
+            })
+        return results
+    except Exception as e:
+        print(f"[WARN] 小红书搜索失败 '{query}': {e}")
+        return []
+
+
+def fetch_xiaohongshu_comments(note_id: str, count: int = 20):
+    """尝试获取小红书笔记评论。"""
+    url = f"https://www.xiaohongshu.com/api/sns/web/v2/comment/page?note_id={note_id}&cursor=&top_comment_id=&image_formats=note_cover_webp"
+    extra = {
+        "Accept": "application/json, text/plain, */*",
+        "Referer": f"https://www.xiaohongshu.com/explore/{note_id}",
+        "Origin": "https://www.xiaohongshu.com",
+    }
+    _polite_delay()
+    try:
+        data = _http_get_json(url, extra)
+        comments = data.get("data", {}).get("comments", [])
+        results = []
+        for c in comments[:count]:
+            user = c.get("user", {}) or {}
+            results.append({
+                "id": str(c.get("id", "")),
+                "title": "",
+                "content": c.get("content", ""),
+                "author": user.get("nickname", "") if isinstance(user, dict) else "",
+                "likes": int(c.get("like_count", 0)),
+                "link": f"https://www.xiaohongshu.com/explore/{note_id}",
+            })
+        return results
+    except Exception as e:
+        print(f"[WARN] 小红书评论获取失败 {note_id}: {e}")
+        return []
+
+
+def search_social(query: str, platform: str, content_type: str = "text"):
+    """社媒检索统一入口。"""
+    platform = platform.lower().strip()
+    content_type = content_type.lower().strip()
+    if platform not in ("douyin", "xiaohongshu"):
+        return {"success": False, "error": f"不支持的平台: {platform}", "platform": platform, "type": content_type, "query": query, "results": []}
+    if content_type not in ("text", "comments"):
+        return {"success": False, "error": f"不支持的内容类型: {content_type}", "platform": platform, "type": content_type, "query": query, "results": []}
+
+    results = []
+    try:
+        if platform == "douyin":
+            posts = fetch_douyin_search(query, count=10)
+            if content_type == "text":
+                results = posts
+            else:
+                for post in posts[:3]:
+                    if post.get("id"):
+                        comments = fetch_douyin_comments(post["id"], count=10)
+                        results.extend(comments)
+        else:
+            posts = fetch_xiaohongshu_search(query, count=10)
+            if content_type == "text":
+                results = posts
+            else:
+                for post in posts[:3]:
+                    if post.get("id"):
+                        comments = fetch_xiaohongshu_comments(post["id"], count=10)
+                        results.extend(comments)
+    except Exception as e:
+        print(f"[WARN] 社媒检索失败 {platform}/{content_type}: {e}")
+        return {"success": False, "error": str(e), "platform": platform, "type": content_type, "query": query, "results": []}
+
+    return {
+        "success": True,
+        "platform": platform,
+        "type": content_type,
+        "query": query,
+        "count": len(results),
+        "results": results,
+    }
+
+
 # ==================== 金句/文案素材 ====================
 
 quotes_cache_file = cige_root / "tools" / "quotes_cache.json"
@@ -878,8 +1337,30 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(fetch_quotes(qtypes, limit, skip_cache))
             return
 
+        if parsed.path == "/music/search":
+            query_str = params.get("query", [""])[0].strip()
+            platform = params.get("platform", ["netease"])[0].strip().lower()
+            if not query_str:
+                self._send_json({"success": False, "error": "请输入查询文案"}, status=400)
+                return
+            if platform != "netease":
+                self._send_json({"success": False, "error": f"暂不支持平台: {platform}"}, status=400)
+                return
+            self._send_json(search_netease_music(query_str))
+            return
+
+        if parsed.path == "/social/search":
+            query_str = params.get("query", [""])[0].strip()
+            platform = params.get("platform", ["douyin"])[0].strip().lower()
+            content_type = params.get("type", ["text"])[0].strip().lower()
+            if not query_str:
+                self._send_json({"success": False, "error": "请输入查询关键词"}, status=400)
+                return
+            self._send_json(search_social(query_str, platform, content_type))
+            return
+
         if parsed.path == "/":
-            self._send_json({"msg": "CiGe 本地数据服务", "usage": "GET /rhyme?char=花  GET /hot-trends?platforms=douyin,xiaohongshu  GET /quotes?types=hitokoto,netease,tag&limit=30"})
+            self._send_json({"msg": "CiGe 本地数据服务", "usage": "GET /rhyme?char=花  GET /hot-trends?platforms=douyin,xiaohongshu  GET /quotes?types=hitokoto,netease,tag&limit=30  GET /music/search?query=文案  GET /social/search?query=关键词&platform=douyin&type=text"})
             return
 
         self._send_json({"error": "Not Found"}, status=404)

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TextStyle } from '@tiptap/extension-text-style';
@@ -38,6 +38,47 @@ function computeLyricStats(text: string): LyricStats {
   return { lineCount: lines.length, charCount, rhymeFinals, verseCount, chorusCount, bridgeCount, outroCount };
 }
 
+interface ToolbarPosition {
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
+function calculateToolbarPosition(editor: ReturnType<typeof useEditor>): ToolbarPosition {
+  if (!editor) return { x: 0, y: 0, visible: false };
+  const { selection } = editor.state;
+  const isEmpty = selection.empty;
+  const isTextBlock = editor.isActive('paragraph') || editor.isActive('heading') || editor.isActive('listItem');
+  const hasSelection = !isEmpty && isTextBlock;
+
+  if (!hasSelection) return { x: 0, y: 0, visible: false };
+
+  const fromCoords = editor.view.coordsAtPos(selection.from);
+  const toCoords = editor.view.coordsAtPos(selection.to);
+
+  const right = Math.max(fromCoords.right, toCoords.right);
+  const bottom = Math.max(fromCoords.bottom, toCoords.bottom);
+
+  const toolbarWidth = 44;
+  const toolbarHeight = 320;
+  const gap = 0;
+
+  let x = right + gap;
+  let y = bottom + gap;
+
+  if (x + toolbarWidth > window.innerWidth - 20) {
+    x = Math.min(fromCoords.left, toCoords.left) - toolbarWidth - gap;
+  }
+  if (y + toolbarHeight > window.innerHeight - 20) {
+    y = bottom - toolbarHeight - gap;
+  }
+
+  x = Math.max(20, x);
+  y = Math.max(20, y);
+
+  return { x, y, visible: true };
+}
+
 const FloatingToolbar: React.FC<{ editor: ReturnType<typeof useEditor> | null }> = ({ editor }) => {
   const [position, setPosition] = useState({ x: 0, y: 0, visible: false });
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -46,43 +87,7 @@ const FloatingToolbar: React.FC<{ editor: ReturnType<typeof useEditor> | null }>
     if (!editor) return;
 
     const updatePosition = () => {
-      const { selection } = editor.state;
-      const isEmpty = selection.empty;
-      const isTextBlock = editor.isActive('paragraph') || editor.isActive('heading') || editor.isActive('listItem');
-      const hasSelection = !isEmpty && isTextBlock;
-
-      if (hasSelection) {
-        const fromCoords = editor.view.coordsAtPos(selection.from);
-        const toCoords = editor.view.coordsAtPos(selection.to);
-        
-        const right = Math.max(fromCoords.right, toCoords.right);
-        const bottom = Math.max(fromCoords.bottom, toCoords.bottom);
-
-        const toolbarWidth = 44;
-        const toolbarHeight = 320;
-        const gap = 0;
-
-        let x = right + gap;
-        let y = bottom + gap;
-
-        if (x + toolbarWidth > window.innerWidth - 20) {
-          x = Math.min(fromCoords.left, toCoords.left) - toolbarWidth - gap;
-        }
-        if (y + toolbarHeight > window.innerHeight - 20) {
-          y = bottom - toolbarHeight - gap;
-        }
-
-        x = Math.max(20, x);
-        y = Math.max(20, y);
-
-        setPosition({
-          x,
-          y,
-          visible: true,
-        });
-      } else {
-        setPosition((prev) => ({ ...prev, visible: false }));
-      }
+      setPosition(calculateToolbarPosition(editor));
     };
 
     const handleMouseUp = () => {
@@ -111,37 +116,7 @@ const FloatingToolbar: React.FC<{ editor: ReturnType<typeof useEditor> | null }>
     action();
     setTimeout(() => {
       if (editor) {
-        const { selection } = editor.state;
-        if (!selection.empty) {
-          const fromCoords = editor.view.coordsAtPos(selection.from);
-          const toCoords = editor.view.coordsAtPos(selection.to);
-          
-          const right = Math.max(fromCoords.right, toCoords.right);
-          const bottom = Math.max(fromCoords.bottom, toCoords.bottom);
-
-          const toolbarWidth = 44;
-          const toolbarHeight = 320;
-          const gap = 0;
-
-          let x = right + gap;
-          let y = bottom + gap;
-
-          if (x + toolbarWidth > window.innerWidth - 20) {
-            x = Math.min(fromCoords.left, toCoords.left) - toolbarWidth - gap;
-          }
-          if (y + toolbarHeight > window.innerHeight - 20) {
-            y = bottom - toolbarHeight - gap;
-          }
-
-          x = Math.max(20, x);
-          y = Math.max(20, y);
-
-          setPosition({
-            x,
-            y,
-            visible: true,
-          });
-        }
+        setPosition(calculateToolbarPosition(editor));
       }
     }, 50);
   };
@@ -249,6 +224,7 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
   const refreshKeyRef = useRef(rhymeRefreshKey);
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
   const rhymeCheckRef = useRef(rhymeCheckOn);
+  const rhymeCacheRef = useRef(new Map<string, RhymeSuggestion>());
 
   useEffect(() => {
     callbackRef.current = onRhymeSuggestion;
@@ -259,7 +235,7 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
 
   useEffect(() => {
     if (!editor) return;
-    detectRhyme();
+    detectRhyme(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rhymeSource, rhymeRefreshKey]);
 
@@ -303,19 +279,23 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
     }
   }, [value, editor]);
 
+  const stats = useMemo(() => {
+    const plainText = editor?.getText() || value;
+    return computeLyricStats(plainText);
+  }, [value, editor]);
+
   useEffect(() => {
     if (onStatsChange) {
-      const plainText = editor?.getText() || value;
-      onStatsChange(computeLyricStats(plainText));
+      onStatsChange(stats);
     }
-  }, [value, onStatsChange, editor]);
+  }, [stats, onStatsChange]);
 
   useEffect(() => {
     if (!editor) return;
     editorRef.current = editor;
   }, [editor]);
 
-  const detectRhyme = async () => {
+  const detectRhyme = async (force = false) => {
     const callback = callbackRef.current;
     const currentEditor = editorRef.current;
     const currentRhymeCheckOn = rhymeCheckRef.current;
@@ -340,8 +320,18 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
       return;
     }
 
-    // 优先尝试本地 Python 韵脚服务（local 模式跳过网络）
     const currentSource = sourceRef.current;
+    const cacheKey = `${charBeforeCursor}:${currentSource}`;
+
+    if (!force) {
+      const cached = rhymeCacheRef.current.get(cacheKey);
+      if (cached) {
+        callback(cached);
+        return;
+      }
+    }
+
+    // 优先尝试本地 Python 韵脚服务（local 模式跳过网络）
     if (currentSource !== 'local') {
       try {
         const controller = new AbortController();
@@ -358,13 +348,15 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
           const words = (data.words || []).filter((w: string) => w !== charBeforeCursor);
           const examples = data.examples || [];
           if (chars.length || words.length) {
-            callback({
+            const suggestion = {
               final: data.final || '',
               characters: chars,
               words: words,
               examples: examples,
               lineChar: charBeforeCursor,
-            });
+            };
+            rhymeCacheRef.current.set(cacheKey, suggestion);
+            callback(suggestion);
             return;
           }
         }
@@ -379,7 +371,9 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
     if (results.length > 0 && results[0].characters.length > 0) {
       const matches = results[0].characters.filter((c: string) => c !== charBeforeCursor);
       const words = results[0].words || [];
-      callback({ final: results[0].final, characters: matches, words: words, examples: [], lineChar: charBeforeCursor });
+      const suggestion = { final: results[0].final, characters: matches, words: words, examples: [], lineChar: charBeforeCursor };
+      rhymeCacheRef.current.set(cacheKey, suggestion);
+      callback(suggestion);
     } else {
       callback(null);
     }
@@ -399,10 +393,17 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
     document.addEventListener('selectionchange', triggerRhymeCheck);
 
     window.cigeEditorAPI = {
+      insertTextAtCursor: (text: string) => {
+        editor.chain().focus().insertContent(text).run();
+      },
       replaceCharBeforeCursor: (char: string) => {
         const pos = editor.state.selection.head;
         if (pos > 0) {
-          editor.commands.deleteRange({ from: pos - 1, to: pos });
+          const lastChar = editor.state.doc.textBetween(pos - 1, pos);
+          // 仅当光标前为汉字时替换，否则在光标处追加
+          if (/[\u4e00-\u9fff]/.test(lastChar)) {
+            editor.commands.deleteRange({ from: pos - 1, to: pos });
+          }
           editor.commands.insertContent(char);
         }
       },

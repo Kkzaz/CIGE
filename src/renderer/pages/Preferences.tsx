@@ -174,7 +174,7 @@ const Preferences: React.FC = () => {
               )}
             </div>
             <div className="update-actions">
-              {status === 'idle' || status === 'not-available' || status === 'error' ? (
+              {status === 'idle' || status === 'not-available' || status === 'error' || status === 'checking' ? (
                 <button className="btn btn-primary btn-sm" onClick={handleCheck} disabled={status === 'checking'}>
                   {status === 'checking' ? '检查中...' : '检查更新'}
                 </button>
