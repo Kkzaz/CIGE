@@ -10,6 +10,7 @@ release
 # Environment & secrets
 tools/.redfox_key
 tools/.gemini_key
+resources/gemini_key.txt
 tools/.env
 .env
 .env.local

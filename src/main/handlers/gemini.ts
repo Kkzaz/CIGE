@@ -1,4 +1,4 @@
-import { ipcMain, net, type IpcMainEvent } from 'electron';
+import { app, ipcMain, net, type IpcMainEvent } from 'electron';
 import fs from 'fs';
 import path from 'path';
 
@@ -16,14 +16,31 @@ function getApiKey(): string | null {
   if (process.env.GEMINI_API_KEY) {
     return process.env.GEMINI_API_KEY.trim();
   }
-  const keyFile = path.join(process.cwd(), 'tools', '.gemini_key');
+
+  const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+  // Development: read from project tools/.gemini_key
+  if (isDev) {
+    const devKeyFile = path.join(process.cwd(), 'tools', '.gemini_key');
+    try {
+      if (fs.existsSync(devKeyFile)) {
+        return fs.readFileSync(devKeyFile, 'utf-8').trim();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Production: read from bundled resources/gemini_key.txt
+  const prodKeyFile = path.join(process.resourcesPath, 'gemini_key.txt');
   try {
-    if (fs.existsSync(keyFile)) {
-      return fs.readFileSync(keyFile, 'utf-8').trim();
+    if (fs.existsSync(prodKeyFile)) {
+      return fs.readFileSync(prodKeyFile, 'utf-8').trim();
     }
   } catch {
     // ignore
   }
+
   return null;
 }
 
@@ -127,11 +144,7 @@ function parseSseChunk(buffer: string): { lines: string[]; remainder: string } {
 async function streamGeminiResponse(event: IpcMainEvent, message: string, history: GeminiMessage[]): Promise<void> {
   const apiKey = getApiKey();
   if (!apiKey) {
-    sendEvent(
-      event,
-      'error',
-      '未配置 Gemini API Key，请设置 GEMINI_API_KEY 环境变量或创建 tools/.gemini_key 文件'
-    );
+    sendEvent(event, 'error', '未找到 Gemini 服务密钥，请检查应用安装包是否完整');
     return;
   }
 
