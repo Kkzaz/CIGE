@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAppSettingsStore } from '../store/appSettings';
 
-type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'macos-signature-error';
 
 interface UpdateInfo {
   version?: string;
@@ -56,6 +56,10 @@ const Preferences: React.FC = () => {
           setStatus('error');
           setErrorMsg(String(payload || '检查更新失败'));
           break;
+        case 'macos-signature-error':
+          setStatus('macos-signature-error');
+          setErrorMsg('当前应用未签名，macOS 自动更新受限');
+          break;
       }
     });
     return removeListener;
@@ -79,6 +83,10 @@ const Preferences: React.FC = () => {
     window.cigeAPI.installUpdate();
   };
 
+  const handleOpenDownloadPage = () => {
+    window.cigeAPI.openExternal('https://github.com/Kkzaz/CIGE/releases/latest');
+  };
+
   const statusText: Record<UpdateStatus, string> = {
     idle: '',
     checking: '正在检查更新...',
@@ -87,6 +95,7 @@ const Preferences: React.FC = () => {
     downloading: `正在下载更新... ${progress.toFixed(0)}%`,
     downloaded: '更新已下载，重启后安装',
     error: errorMsg || '检查更新失败',
+    'macos-signature-error': errorMsg || 'macOS 自动更新需要应用签名',
   };
 
   return (
@@ -171,6 +180,10 @@ const Preferences: React.FC = () => {
               ) : status === 'available' || status === 'downloading' ? null : status === 'downloaded' ? (
                 <button className="btn btn-primary btn-sm" onClick={handleInstall}>
                   重启并安装
+                </button>
+              ) : status === 'macos-signature-error' ? (
+                <button className="btn btn-primary btn-sm" onClick={handleOpenDownloadPage}>
+                  前往 GitHub 下载
                 </button>
               ) : null}
             </div>

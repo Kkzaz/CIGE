@@ -111,6 +111,7 @@ const api = {
 
   // App info
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
   getAppSettings: () => ipcRenderer.invoke('app:get-settings'),
   setAppSetting: (key: string, value: unknown) => ipcRenderer.invoke('app:set-setting', key, value),
   resetAppSettings: () => ipcRenderer.invoke('app:reset-settings'),

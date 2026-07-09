@@ -1,5 +1,41 @@
-import { ipcMain, BrowserWindow, app, dialog } from 'electron';
+import { ipcMain, BrowserWindow, app, dialog, shell } from 'electron';
 import { autoUpdater, UpdateInfo } from 'electron-updater';
+
+const RELEASE_URL = 'https://github.com/Kkzaz/CIGE/releases/latest';
+
+function isMacOSSignatureError(message: string): boolean {
+  if (process.platform !== 'darwin') return false;
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('signature') ||
+    lower.includes('did not pass validation') ||
+    lower.includes('codesign') ||
+    lower.includes('code signature') ||
+    lower.includes('不含资源') ||
+    lower.includes('签名')
+  );
+}
+
+function showMacOSSignatureDialog(win: BrowserWindow, version?: string): void {
+  dialog
+    .showMessageBox(win, {
+      type: 'warning',
+      title: 'macOS 自动更新需要应用签名',
+      message: version ? `词歌 v${version} 已发布，但当前应用未进行 Apple 代码签名。` : '当前应用未进行 Apple 代码签名。',
+      detail: 'macOS 的自动更新机制要求应用经过有效签名。请前往 GitHub Releases 页面手动下载最新版本安装包。',
+      buttons: ['前往 GitHub 下载', '关闭'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    .then(({ response }) => {
+      if (response === 0) {
+        shell.openExternal(RELEASE_URL);
+      }
+    })
+    .catch(() => {
+      // ignore
+    });
+}
 
 export function registerUpdateHandlers(getMainWindow: () => BrowserWindow | null): void {
   function sendUpdateStatus(status: string, payload?: unknown): void {
@@ -9,7 +45,18 @@ export function registerUpdateHandlers(getMainWindow: () => BrowserWindow | null
   autoUpdater.on('checking-for-update', () => sendUpdateStatus('checking'));
   autoUpdater.on('update-available', (info: UpdateInfo) => sendUpdateStatus('available', info));
   autoUpdater.on('update-not-available', (info: UpdateInfo) => sendUpdateStatus('not-available', info));
-  autoUpdater.on('error', (err: Error) => sendUpdateStatus('error', err.message));
+  autoUpdater.on('error', (err: Error) => {
+    const message = err.message || String(err);
+    if (isMacOSSignatureError(message)) {
+      const win = getMainWindow();
+      if (win) {
+        showMacOSSignatureDialog(win);
+      }
+      sendUpdateStatus('macos-signature-error', message);
+      return;
+    }
+    sendUpdateStatus('error', message);
+  });
   autoUpdater.on('download-progress', (progress) => sendUpdateStatus('progress', progress));
   autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
     sendUpdateStatus('downloaded', info);

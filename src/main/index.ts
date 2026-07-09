@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
@@ -177,6 +177,10 @@ function registerIpcHandlers(): void {
   const db = getDatabase();
 
   ipcMain.handle('app:get-version', () => app.getVersion());
+
+  ipcMain.handle('app:open-external', (_, url: string) => {
+    shell.openExternal(url);
+  });
 
   ipcMain.handle('window:set-reader-active', (_, active: boolean) => {
     const win = getMainWindow();
