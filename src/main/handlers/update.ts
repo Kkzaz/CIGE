@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, app } from 'electron';
+import { ipcMain, BrowserWindow, app, dialog } from 'electron';
 import { autoUpdater, UpdateInfo } from 'electron-updater';
 
 export function registerUpdateHandlers(getMainWindow: () => BrowserWindow | null): void {
@@ -11,7 +11,29 @@ export function registerUpdateHandlers(getMainWindow: () => BrowserWindow | null
   autoUpdater.on('update-not-available', (info: UpdateInfo) => sendUpdateStatus('not-available', info));
   autoUpdater.on('error', (err: Error) => sendUpdateStatus('error', err.message));
   autoUpdater.on('download-progress', (progress) => sendUpdateStatus('progress', progress));
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => sendUpdateStatus('downloaded', info));
+  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+    sendUpdateStatus('downloaded', info);
+    const win = getMainWindow();
+    if (!win) return;
+    dialog
+      .showMessageBox(win, {
+        type: 'info',
+        title: '更新已就绪',
+        message: `词歌 v${info.version} 已下载完成`,
+        detail: '点击「立即重启」安装更新，或选择「稍后」在退出应用时自动安装。',
+        buttons: ['立即重启', '稍后'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then(({ response }) => {
+        if (response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+  });
 
   ipcMain.handle('update:check', async () => {
     if (!app.isPackaged) {

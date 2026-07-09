@@ -23,7 +23,7 @@ import { cancelAllImports } from './services/bookImportService';
 let mainWindow: BrowserWindow | null = null;
 
 // Auto updater configuration
-autoUpdater.autoDownload = false;
+autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
 // Disable GPU acceleration on macOS to prevent GPU process crashes

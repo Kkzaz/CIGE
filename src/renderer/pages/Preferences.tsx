@@ -75,16 +75,6 @@ const Preferences: React.FC = () => {
     }
   };
 
-  const handleDownload = async () => {
-    setStatus('downloading');
-    try {
-      await window.cigeAPI.downloadUpdate();
-    } catch (err) {
-      setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : String(err));
-    }
-  };
-
   const handleInstall = () => {
     window.cigeAPI.installUpdate();
   };
@@ -92,7 +82,7 @@ const Preferences: React.FC = () => {
   const statusText: Record<UpdateStatus, string> = {
     idle: '',
     checking: '正在检查更新...',
-    available: `发现新版本：${updateInfo?.version || ''}`,
+    available: `发现新版本 ${updateInfo?.version || ''}，正在自动下载...`,
     'not-available': '当前已是最新版本',
     downloading: `正在下载更新... ${progress.toFixed(0)}%`,
     downloaded: '更新已下载，重启后安装',
@@ -178,11 +168,7 @@ const Preferences: React.FC = () => {
                 <button className="btn btn-primary btn-sm" onClick={handleCheck} disabled={status === 'checking'}>
                   {status === 'checking' ? '检查中...' : '检查更新'}
                 </button>
-              ) : status === 'available' ? (
-                <button className="btn btn-primary btn-sm" onClick={handleDownload}>
-                  立即下载
-                </button>
-              ) : status === 'downloaded' ? (
+              ) : status === 'available' || status === 'downloading' ? null : status === 'downloaded' ? (
                 <button className="btn btn-primary btn-sm" onClick={handleInstall}>
                   重启并安装
                 </button>
