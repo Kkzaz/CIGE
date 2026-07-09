@@ -98,6 +98,7 @@
       ]
     },
     "win": {
+      "artifactName": "${name}-setup-${version}.${ext}",
       "target": [
         {
           "target": "nsis",
