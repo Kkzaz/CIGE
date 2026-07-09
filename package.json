@@ -1,6 +1,6 @@
 {
   "name": "cige",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "CiGe - 词作者创作辅助应用",
   "main": "dist/main/main/index.js",
   "scripts": {
@@ -119,6 +119,10 @@
       {
         "from": "resources/cige.db",
         "to": "cige.db"
+      },
+      {
+        "from": "resources/gemini_key.txt",
+        "to": "gemini_key.txt"
       }
     ],
     "publish": {
