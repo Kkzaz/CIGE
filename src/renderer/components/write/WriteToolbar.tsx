@@ -24,10 +24,14 @@ const WriteToolbar: React.FC<WriteToolbarProps> = ({
   return (
     <div className="ws-toolbar">
       <div className="ws-toolbar-left">
-        <button className="ws-btn" onClick={() => onInsertMarker('[主歌]')} title="插入主歌">[主歌]</button>
-        <button className="ws-btn" onClick={() => onInsertMarker('[副歌]')} title="插入副歌">[副歌]</button>
-        <button className="ws-btn" onClick={() => onInsertMarker('[桥段]')} title="插入桥段">[桥段]</button>
-        <button className="ws-btn" onClick={() => onInsertMarker('[尾奏]')} title="插入尾奏">[尾奏]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Intro]')} title="插入前奏">[Intro]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Verse]')} title="插入主歌">[Verse]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Pre-Chorus]')} title="插入弱副">[Pre-Chorus]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Chorus]')} title="插入副歌">[Chorus]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Post-Chorus]')} title="插入强副">[Post-Chorus]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Interlude]')} title="插入间奏">[Interlude]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Bridge]')} title="插入桥段">[Bridge]</button>
+        <button className="ws-btn" onClick={() => onInsertMarker('[Outro]')} title="插入尾奏">[Outro]</button>
       </div>
 
       <div className="ws-toolbar-right">

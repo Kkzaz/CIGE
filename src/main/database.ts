@@ -6,6 +6,42 @@ import fs from 'fs';
 let db: Database.Database;
 
 export function getDbPath(): string {
+  // 开发环境用项目目录规避 TCC 对 --no-sandbox 进程的写限制；
+  // 生产环境用 userData（打包后签名正常，沙箱可写）
+  const isDev = process.env.NODE_ENV === 'development' && !app.isPackaged;
+  if (isDev) {
+    const devDir = path.join(process.cwd(), '.db');
+    if (!fs.existsSync(devDir)) {
+      fs.mkdirSync(devDir, { recursive: true });
+    }
+    const devDbPath = path.join(devDir, 'cige.db');
+    // 首次运行时从 userData 或 resources 复制现有数据库
+    if (!fs.existsSync(devDbPath)) {
+      const userDataPath = app.getPath('userData');
+      const userDbPath = path.join(userDataPath, 'cige.db');
+      const resourcesDbPath = path.join(process.resourcesPath, 'cige.db');
+      const appDbPath = path.join(app.getAppPath(), '.db', 'cige.db');
+      let sourceDbPath: string | null = null;
+      if (fs.existsSync(userDbPath)) {
+        sourceDbPath = userDbPath;
+      } else if (fs.existsSync(resourcesDbPath)) {
+        sourceDbPath = resourcesDbPath;
+      } else if (fs.existsSync(appDbPath)) {
+        sourceDbPath = appDbPath;
+      }
+      if (sourceDbPath) {
+        try {
+          fs.copyFileSync(sourceDbPath, devDbPath);
+          console.log('[Database] copied from', sourceDbPath, 'to', devDbPath);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    console.log('[Database] opening:', devDbPath);
+    return devDbPath;
+  }
+  // 生产环境
   const userDataPath = app.getPath('userData');
   const userDbPath = path.join(userDataPath, 'cige.db');
   if (!fs.existsSync(userDataPath)) {
@@ -142,6 +178,58 @@ export function initDatabase(): Database.Database {
     } catch {
       // Column already exists, ignore
     }
+  }
+
+  // Migration: add audio columns to excerpts (legacy, superseded by excerpt_audios table)
+  try {
+    db.exec(`ALTER TABLE excerpts ADD COLUMN audio_path TEXT`);
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`ALTER TABLE excerpts ADD COLUMN audio_duration REAL`);
+  } catch {
+    // Column already exists, ignore
+  }
+
+  // Migration: excerpt_audios table (one-to-many, supports multiple motifs per excerpt)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS excerpt_audios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      excerpt_id INTEGER NOT NULL,
+      audio_path TEXT NOT NULL,
+      duration REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (excerpt_id) REFERENCES excerpts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_excerpt_audios_excerpt_id ON excerpt_audios(excerpt_id);
+  `);
+
+  // Migration: add `deleted` column to legacy excerpt_audios (if table created before soft-delete)
+  try {
+    db.exec(`ALTER TABLE excerpt_audios ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    // Column already exists, ignore
+  }
+  try {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_excerpt_audios_deleted ON excerpt_audios(deleted)`);
+  } catch {
+    // Index already exists, ignore
+  }
+
+  // Migration: move legacy single audio_path into excerpt_audios rows
+  try {
+    db.exec(`
+      INSERT INTO excerpt_audios (excerpt_id, audio_path, duration, sort_order)
+      SELECT id, audio_path, COALESCE(audio_duration, 0), 0
+      FROM excerpts
+      WHERE audio_path IS NOT NULL AND audio_path != ''
+        AND id NOT IN (SELECT excerpt_id FROM excerpt_audios)
+    `);
+  } catch {
+    // ignore migration errors
   }
 
   // Migration: add `folder_id` column to writings (if not exists)

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import ConfirmDialog from '../components/ConfirmDialog';
+import AudioPlayer from '../components/excerpt/AudioPlayer';
 import type { DeletedItem } from '../../shared/types';
 
 const RecycleBin: React.FC = () => {
@@ -35,6 +36,7 @@ const RecycleBin: React.FC = () => {
       case 'writing': return '作品';
       case 'excerpt': return '摘抄';
       case 'inspiration': return '灵感';
+      case 'excerpt_audio': return '音频';
       default: return type;
     }
   };
@@ -44,6 +46,7 @@ const RecycleBin: React.FC = () => {
       case 'writing': return 'tag-pill-0';
       case 'excerpt': return 'tag-pill-2';
       case 'inspiration': return 'tag-pill-4';
+      case 'excerpt_audio': return 'tag-pill-1';
       default: return '';
     }
   };
@@ -114,6 +117,16 @@ const RecycleBin: React.FC = () => {
                   }}>
                     {item.title || item.preview}
                   </div>
+                  {item.type === 'excerpt_audio' && item.audio_path && (
+                    <div style={{ marginTop: 6 }}>
+                      <AudioPlayer
+                        audioPath={item.audio_path}
+                        duration={item.audio_duration}
+                        excerptId={item.id}
+                        onDelete={null}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

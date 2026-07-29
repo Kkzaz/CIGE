@@ -26,6 +26,16 @@ export interface Excerpt {
   updated_at: string;
 }
 
+export interface ExcerptAudio {
+  id: number;
+  excerpt_id: number;
+  audio_path: string;
+  duration: number;
+  sort_order: number;
+  deleted: number;
+  created_at: string;
+}
+
 export interface Inspiration {
   id: number;
   content: string;
@@ -36,10 +46,12 @@ export interface Inspiration {
 
 export interface DeletedItem {
   id: number;
-  type: 'writing' | 'excerpt' | 'inspiration';
+  type: 'writing' | 'excerpt' | 'inspiration' | 'excerpt_audio';
   title: string;
   preview: string;
   deleted_at: string;
+  audio_path?: string;
+  audio_duration?: number;
 }
 
 export interface Folder {
@@ -65,6 +77,9 @@ export const IPC_CHANNELS = {
   EXCERPT_CREATE: 'excerpt:create',
   EXCERPT_UPDATE: 'excerpt:update',
   EXCERPT_DELETE: 'excerpt:delete',
+  EXCERPT_SAVE_AUDIO: 'excerpt:save-audio',
+  EXCERPT_GET_AUDIOS: 'excerpt:get-audios',
+  EXCERPT_DELETE_AUDIO: 'excerpt:delete-audio',
 
   // Inspirations
   INSPIRATION_GET_ALL: 'inspiration:get-all',

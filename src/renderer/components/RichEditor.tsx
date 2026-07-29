@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { Extension } from '@tiptap/core';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { TextAlign } from '@tiptap/extension-text-align';
@@ -21,10 +22,11 @@ function computeLyricStats(text: string): LyricStats {
   let verseCount = 0, chorusCount = 0, bridgeCount = 0, outroCount = 0;
 
   for (const line of lines) {
-    if (line.includes('[主歌]')) verseCount++;
-    else if (line.includes('[副歌]')) chorusCount++;
-    else if (line.includes('[桥段]')) bridgeCount++;
-    else if (line.includes('[尾奏]')) outroCount++;
+    // 同时识别英文与中文结构标记，与工具栏插入的英文标记匹配
+    if (/\[(Verse|主歌)\]/i.test(line)) verseCount++;
+    else if (/\[(Chorus|副歌)\]/i.test(line)) chorusCount++;
+    else if (/\[(Bridge|桥段)\]/i.test(line)) bridgeCount++;
+    else if (/\[(Outro|尾奏)\]/i.test(line)) outroCount++;
 
     const trimmed = line.trimEnd();
     const lastChar = trimmed[trimmed.length - 1];
@@ -225,6 +227,9 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
   const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
   const rhymeCheckRef = useRef(rhymeCheckOn);
   const rhymeCacheRef = useRef(new Map<string, RhymeSuggestion>());
+  // 保存回调 ref，避免 keymap extension 依赖变化重建
+  const saveRef = useRef(onSave);
+  useEffect(() => { saveRef.current = onSave; }, [onSave]);
 
   useEffect(() => {
     callbackRef.current = onRhymeSuggestion;
@@ -259,6 +264,18 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
       }),
       Placeholder.configure({
         placeholder: '开始创作你的歌词...',
+      }),
+      // Cmd+S 保存快捷键
+      Extension.create({
+        name: 'saveKeymap',
+        addKeyboardShortcuts() {
+          return {
+            'Mod-s': () => {
+              saveRef.current?.();
+              return true;
+            },
+          };
+        },
       }),
     ],
     onUpdate: ({ editor }) => {
@@ -335,7 +352,7 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
     if (currentSource !== 'local') {
       try {
         const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 2000);
+        const timeout = window.setTimeout(() => controller.abort(), 8000);
         const resp = await fetch(
           `http://127.0.0.1:8792/rhyme?char=${encodeURIComponent(charBeforeCursor)}&source=${currentSource}`,
           { signal: controller.signal }
@@ -421,6 +438,8 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
       setTextAlign: (align: string) => {
         editor.chain().focus().setTextAlign(align as any).run();
       },
+      undo: () => editor.chain().focus().undo().run(),
+      redo: () => editor.chain().focus().redo().run(),
     };
 
     return () => {

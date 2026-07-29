@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useStore } from '../store';
 import useStatusBarStore from '../store/statusBar';
 import RichEditor from '../components/RichEditor';
@@ -202,6 +202,24 @@ const Write: React.FC = () => {
     return () => { if (saveTimerRef.current) clearInterval(saveTimerRef.current); };
   }, [saveOnly]);
 
+  // 页面关闭/隐藏时保存，避免意外丢失
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (contentDirtyRef.current) saveOnly();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && contentDirtyRef.current) {
+        saveOnly();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [saveOnly]);
+
   const loadWritings = async () => {
     const data = await window.cigeAPI.getWritings();
     setWritings(data as Writing[]);
@@ -217,6 +235,10 @@ const Write: React.FC = () => {
   };
 
   const selectWriting = async (writing: Writing) => {
+    // 切换前若有未保存改动，先保存
+    if (contentDirtyRef.current && currentWritingRef.current) {
+      await saveOnly();
+    }
     const full = await window.cigeAPI.getWritingById(writing.id);
     setCurrentWriting(full as Writing);
     setContent((full as Writing).content);
@@ -426,18 +448,40 @@ const Write: React.FC = () => {
     setContextMenu(null);
   };
 
-  // Build nested folder structure
-  const buildNestedFolders = (parentId: number | null): NestedFolder[] => {
-    return folders
-      .filter(f => f.parent_id === parentId)
-      .map(f => ({
-        ...f,
-        children: buildNestedFolders(f.id)
-      }));
-  };
+  // Build nested folder structure (memoized to avoid recompute on every keystroke)
+  const nestedFolders = useMemo(() => {
+    const build = (parentId: number | null): NestedFolder[] => {
+      return folders
+        .filter(f => f.parent_id === parentId)
+        .map(f => ({
+          ...f,
+          children: build(f.id)
+        }));
+    };
+    return build(null);
+  }, [folders]);
 
-  const nestedFolders = buildNestedFolders(null);
-  const ungroupedWritings = writings.filter(w => w.folder_id == null);
+  const ungroupedWritings = useMemo(
+    () => writings.filter(w => w.folder_id == null),
+    [writings]
+  );
+
+  // 预构 folderId -> writings 映射，避免 FolderTree 内每个文件夹都全量 filter（N+1）
+  const writingsByFolder = useMemo(() => {
+    const map = new Map<number, Writing[]>();
+    for (const w of writings) {
+      if (w.folder_id == null) continue;
+      const arr = map.get(w.folder_id);
+      if (arr) arr.push(w);
+      else map.set(w.folder_id, [w]);
+    }
+    return map;
+  }, [writings]);
+
+  const getWritingsInFolder = useCallback(
+    (folderId: number): Writing[] => writingsByFolder.get(folderId) ?? [],
+    [writingsByFolder]
+  );
 
   const handleWritingDrop = (targetWriting: Writing) => async (e: React.DragEvent) => {
     e.preventDefault();
@@ -481,10 +525,17 @@ const Write: React.FC = () => {
   };
 
   const handleInsertMarker = (marker: string) => {
-    setContent((prev) => {
-      const next = prev ? (prev.endsWith('\n') ? prev : prev + '\n') + marker + '\n' : marker + '\n';
-      return next;
-    });
+    // 在光标处插入标签，并在后面加换行
+    const api = window.cigeEditorAPI;
+    if (api) {
+      api.insertTextAtCursor(marker + '\n');
+    } else {
+      // 回退：追加到末尾
+      setContent((prev) => {
+        const next = prev ? (prev.endsWith('\n') ? prev : prev + '\n') + marker + '\n' : marker + '\n';
+        return next;
+      });
+    }
     contentDirtyRef.current = true;
     updateSaveStatus('unsaved');
   };
@@ -494,8 +545,8 @@ const Write: React.FC = () => {
       <WriteToolbar
         saveStatus={saveStatus}
         onInsertMarker={handleInsertMarker}
-        onUndo={() => document.execCommand('undo')}
-        onRedo={() => document.execCommand('redo')}
+        onUndo={() => window.cigeEditorAPI?.undo()}
+        onRedo={() => window.cigeEditorAPI?.redo()}
         onNew={handleNew}
         onSave={doSave}
         onOpenSettings={() => setShowSettings(true)}
@@ -548,6 +599,7 @@ const Write: React.FC = () => {
           onUngroupedDrop={handleUngroupedDrop}
           onResizeStart={handleResizeStart}
           renderWritingItem={renderWritingItem}
+          getWritingsInFolder={getWritingsInFolder}
         />
 
         {currentWriting ? (

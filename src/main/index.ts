@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, session } from 'electron';
 import path from 'path';
 import http from 'http';
 import fs from 'fs';
@@ -206,6 +206,14 @@ function registerIpcHandlers(): void {
 app.whenReady().then(async () => {
   initDatabase();
   registerIpcHandlers();
+
+  // 允许渲染进程申请麦克风权限（摘抄录音）
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media');
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    return permission === 'media';
+  });
 
   // 确保本地 Python 数据服务已启动（会自动传递 REDFOX_API_KEY）
   await ensureLocalService();

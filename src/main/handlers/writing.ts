@@ -53,9 +53,24 @@ export function registerWritingHandlers(db: Database): void {
   });
 
   ipcMain.handle('writing:save-snapshot', (_event, writingId: number, content: string) => {
-    db.prepare(
+    const insertStmt = db.prepare(
       'INSERT INTO writing_snapshots (writing_id, content) VALUES (?, ?)'
-    ).run(writingId, content);
+    );
+    const cleanupStmt = db.prepare(
+      `DELETE FROM writing_snapshots
+       WHERE writing_id = ?
+         AND id NOT IN (
+           SELECT id FROM writing_snapshots
+           WHERE writing_id = ?
+           ORDER BY snapshot_at DESC
+           LIMIT 20
+         )`
+    );
+    const tx = db.transaction(() => {
+      insertStmt.run(writingId, content);
+      cleanupStmt.run(writingId, writingId);
+    });
+    tx();
     return true;
   });
 }

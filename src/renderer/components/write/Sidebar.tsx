@@ -44,6 +44,7 @@ interface SidebarProps {
   onUngroupedDrop: (e: React.DragEvent) => void;
   onResizeStart: (e: React.MouseEvent) => void;
   renderWritingItem: (w: Writing) => React.ReactNode;
+  getWritingsInFolder: (folderId: number) => Writing[];
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -88,6 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onUngroupedDrop,
   onResizeStart,
   renderWritingItem,
+  getWritingsInFolder,
 }) => {
   const collapseGuardRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const justCollapsedRef = useRef(false);
@@ -232,7 +234,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 onRenameChange={onRenameChange}
                 onCancelRename={onCancelRename}
                 onDeleteFolder={onDeleteFolder}
-                writingsInFolder={(id: number) => writings.filter((w) => w.folder_id === id)}
+                writingsInFolder={getWritingsInFolder}
                 renderWritingItem={renderWritingItem}
               />
             ))}

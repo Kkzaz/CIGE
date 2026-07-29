@@ -35,6 +35,9 @@ declare global {
   interface Window {
     cigeAPI: CigeAPI;
     __CIGE_INITIAL_SETTINGS__?: AppInitialSettings;
+    electronClipboard?: {
+      readText: () => string;
+    };
     cigeEditorAPI?: {
       insertTextAtCursor: (text: string) => void;
       replaceCharBeforeCursor: (char: string) => void;
@@ -44,6 +47,8 @@ declare global {
       toggleUnderline: () => void;
       toggleStrike: () => void;
       setTextAlign: (align: string) => void;
+      undo: () => void;
+      redo: () => void;
     };
   }
 }

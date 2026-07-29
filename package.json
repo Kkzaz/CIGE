@@ -5,7 +5,7 @@
   "main": "dist/main/main/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:main\" \"npm run dev:renderer\"",
-    "dev:main": "NODE_ENV=development tsc -p tsconfig.main.json && NODE_ENV=development electron dist/main/main/index.js",
+    "dev:main": "NODE_ENV=development tsc -p tsconfig.main.json && NODE_ENV=development electron dist/main/main/index.js --no-sandbox",
     "dev:renderer": "vite",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build",

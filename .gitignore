@@ -21,3 +21,4 @@ tools/.env
 .trae/
 debug-*.md
 tools/rhyme_cache/
+audio/

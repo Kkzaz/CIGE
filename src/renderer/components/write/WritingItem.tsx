@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import type { Writing } from '../../../shared/types';
 
 interface WritingItemProps {
@@ -95,4 +95,4 @@ const WritingItem: React.FC<WritingItemProps> = ({
   );
 };
 
-export default WritingItem;
+export default memo(WritingItem);

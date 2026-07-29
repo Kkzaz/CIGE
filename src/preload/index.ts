@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, clipboard } from 'electron';
 
 const initialSettings = ipcRenderer.sendSync('app:get-settings-sync');
 
@@ -15,6 +15,7 @@ const api = {
 
   // Excerpts
   getExcerpts: () => ipcRenderer.invoke('excerpt:get-all'),
+  getExcerptsWithAudios: () => ipcRenderer.invoke('excerpt:get-all-with-audios'),
   searchExcerpts: (query: string, tag?: string) =>
     ipcRenderer.invoke('excerpt:search', query, tag),
   createExcerpt: (data: { content: string; source: string; tags: string }) =>
@@ -22,6 +23,11 @@ const api = {
   updateExcerpt: (id: number, data: { content?: string; source?: string; tags?: string }) =>
     ipcRenderer.invoke('excerpt:update', id, data),
   deleteExcerpt: (id: number) => ipcRenderer.invoke('excerpt:delete', id),
+  saveExcerptAudio: (excerptId: number, buffer: ArrayBuffer, duration: number) =>
+    ipcRenderer.invoke('excerpt:save-audio', excerptId, buffer, duration),
+  getExcerptAudios: (excerptId: number) => ipcRenderer.invoke('excerpt:get-audios', excerptId),
+  getExcerptAudio: (rel: string) => ipcRenderer.invoke('excerpt:get-audio', rel),
+  deleteExcerptAudio: (audioId: number) => ipcRenderer.invoke('excerpt:delete-audio', audioId),
 
   // Inspirations
   getInspirations: () => ipcRenderer.invoke('inspiration:get-all'),
@@ -144,5 +150,8 @@ const api = {
 
 contextBridge.exposeInMainWorld('cigeAPI', api);
 contextBridge.exposeInMainWorld('__CIGE_INITIAL_SETTINGS__', initialSettings);
+contextBridge.exposeInMainWorld('electronClipboard', {
+  readText: () => clipboard.readText(),
+});
 
 export type CigeAPI = typeof api;
