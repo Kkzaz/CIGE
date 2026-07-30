@@ -16,6 +16,8 @@ import { registerRecycleHandlers } from './handlers/recycle';
 import { registerSettingsHandlers } from './handlers/settings';
 import { registerUpdateHandlers } from './handlers/update';
 import { registerGeminiHandlers } from './handlers/gemini';
+import { registerWebDAVHandlers } from './handlers/webdav';
+import { getAppSettings } from './settings';
 
 import { ensureLocalService, killLocalService } from './services/rhymeServer';
 import { cancelAllImports } from './services/bookImportService';
@@ -201,6 +203,7 @@ function registerIpcHandlers(): void {
   registerSettingsHandlers();
   registerUpdateHandlers(getMainWindow);
   registerGeminiHandlers();
+  registerWebDAVHandlers(db);
 }
 
 app.whenReady().then(async () => {
@@ -219,6 +222,13 @@ app.whenReady().then(async () => {
   await ensureLocalService();
 
   const win = await createMainWindow();
+
+  // 启动后从云端拉取新条目（异步，不阻塞启动）
+  if (getAppSettings().webdav.enabled) {
+    import('./handlers/webdav').then(({ pullFromCloudManually }) => {
+      pullFromCloudManually(getDatabase()).catch(() => {});
+    });
+  }
   registerGlobalShortcuts(win);
 
   // 启动后延迟检查更新

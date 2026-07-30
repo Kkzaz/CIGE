@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="词歌速记">
+  <title>词歌速记</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --bg: #0d0d0f;
+      --surface: #1a1a1e;
+      --surface-2: #25252b;
+      --text: #e8e8ec;
+      --text-dim: #8e8e96;
+      --accent: #6c8aff;
+      --accent-dim: #4a6ac0;
+      --danger: #ff5c5c;
+      --success: #4caf50;
+      --radius: 12px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: 16px;
+      padding-bottom: calc(20px + var(--safe-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+    .logo { font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+    .logo span { color: var(--accent); }
+    .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); }
+    .status-dot.online { background: var(--success); }
+    .status-dot.offline { background: var(--danger); }
+
+    /* 登录配置区 */
+    .config-section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .config-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .config-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+    .config-input {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--surface-2);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    .config-input:focus { border-color: var(--accent); }
+    .config-input::placeholder { color: var(--text-dim); }
+    .config-link { color: var(--accent); font-size: 12px; text-decoration: none; }
+
+    /* 文字灵感区 */
+    .quote-section { display: flex; flex-direction: column; gap: 10px; }
+    .quote-input {
+      width: 100%;
+      min-height: 120px;
+      background: var(--surface);
+      border: 1px solid var(--surface-2);
+      border-radius: var(--radius);
+      padding: 14px;
+      color: var(--text);
+      font-size: 16px;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .quote-input:focus { border-color: var(--accent); }
+    .meta-row { display: flex; gap: 8px; }
+    .meta-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--surface-2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    .meta-input:focus { border-color: var(--accent); }
+    .meta-input::placeholder { color: var(--text-dim); }
+    .btn {
+      border: none;
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:disabled { opacity: 0.5; }
+
+    /* 录音区 */
+    .record-section {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .record-title { font-size: 14px; color: var(--text-dim); }
+    .record-btn {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: var(--danger);
+      border: 4px solid var(--surface);
+      box-shadow: 0 0 0 2px var(--danger);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .record-btn:active { transform: scale(0.92); }
+    .record-btn.recording {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 2px var(--danger); }
+      50% { box-shadow: 0 0 0 8px rgba(255,92,92,0.3); }
+    }
+    .record-btn svg { width: 28px; height: 28px; fill: white; }
+    .record-time { font-size: 24px; font-weight: 300; font-variant-numeric: tabular-nums; }
+    .record-hint { font-size: 12px; color: var(--text-dim); text-align: center; }
+    .record-preview {
+      width: 100%;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .record-preview audio { flex: 1; height: 36px; }
+
+    /* 上传文件 */
+    .upload-section { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+    .upload-label {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 16px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      font-size: 14px;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .upload-label:active { background: var(--accent-dim); }
+    .upload-label svg { width: 16px; height: 16px; fill: currentColor; }
+    .upload-hint { font-size: 11px; color: var(--text-dim); text-align: center; opacity: 0.7; }
+    .file-name { font-size: 12px; color: var(--accent); text-align: center; word-break: break-all; }
+    .divider-or {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      color: var(--text-dim); font-size: 11px;
+    }
+    .divider-or::before, .divider-or::after {
+      content: ''; flex: 1; height: 1px; background: var(--surface-2);
+    }
+
+    /* 同步状态 */
+    .sync-log {
+      flex: 1;
+      min-height: 80px;
+      max-height: 200px;
+      overflow-y: auto;
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 12px;
+      font-size: 13px;
+      color: var(--text-dim);
+      line-height: 1.8;
+      -webkit-overflow-scrolling: touch;
+    }
+    .sync-log:empty::before {
+      content: "同步记录将显示在这里";
+      color: var(--text-dim);
+      opacity: 0.5;
+    }
+    .log-item { display: flex; align-items: center; gap: 8px; }
+    .log-item .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+    .log-item.fail .dot { background: var(--danger); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: calc(30px + var(--safe-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      pointer-events: none;
+      z-index: 100;
+      white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(-4px); }
+
+    /* 分隔线 */
+    .divider {
+      height: 1px;
+      background: var(--surface-2);
+      margin: 2px 0;
+    }
+    /* 隐藏已配置的区块 */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">词歌<span>·速记</span></div>
+    <div class="status">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">未连接</span>
+    </div>
+  </header>
+
+  <!-- WebDAV 配置（首次使用需填写） -->
+  <div class="config-section" id="configSection">
+    <div class="config-title">账号配置</div>
+    <div class="config-desc">
+      首次使用请填写坚果云账号、应用密码和代理地址，配置后可随时记录灵感和旋律动机。
+      <a class="config-link" href="https://help.jianguoyun.com/?p=2064" target="_blank" rel="noopener">如何获取应用密码？</a>
+    </div>
+    <input class="config-input" id="wdUser" type="text" placeholder="坚果云账号（邮箱）">
+    <input class="config-input" id="wdPass" type="password" placeholder="应用密码（非登录密码）">
+    <input class="config-input" id="wdProxy" type="text" placeholder="代理地址（形如 https://cige-proxy.xxx.workers.dev）">
+    <button class="btn btn-primary" id="saveConfigBtn">保存并连接</button>
+  </div>
+
+  <!-- 文字灵感 -->
+  <div class="quote-section hidden" id="quoteSection">
+    <textarea class="quote-input" id="quoteInput" placeholder="一句话灵感、一段歌词、一闪而过的念头..."></textarea>
+    <div class="meta-row">
+      <input class="meta-input" id="sourceInput" placeholder="来源（可选）">
+      <input class="meta-input" id="tagsInput" placeholder="标签" value="移动端">
+    </div>
+    <button class="btn btn-primary" id="sendQuoteBtn">上传到云端</button>
+  </div>
+
+  <div class="divider hidden" id="divider1"></div>
+
+  <!-- 录音动机 -->
+  <div class="record-section hidden" id="recordSection">
+    <div class="record-title">录一段旋律动机</div>
+
+    <div id="recordArea" style="display:none; flex-direction:column; align-items:center; gap:14px; width:100%;">
+      <div class="record-time" id="recordTime">00:00</div>
+      <div class="record-btn" id="recordBtn">
+        <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+      </div>
+      <div class="record-hint" id="recordHint">点击开始录音</div>
+    </div>
+
+    <div id="recordDisabledHint" class="record-hint" style="display:none; padding: 8px 12px; background: var(--surface-2); border-radius: 6px; line-height: 1.5;">
+      浏览器限制：非 HTTPS 无法访问麦克风。<br>
+      可用手机录音机录好后通过下方上传。
+    </div>
+
+    <div class="record-preview" id="recordPreview" style="display:none;">
+      <audio id="audioPreview" controls></audio>
+      <button class="btn btn-primary" id="sendAudioBtn" style="padding:8px 16px;font-size:13px;">上传</button>
+    </div>
+
+    <div class="divider-or">或</div>
+    <div class="upload-section">
+      <label class="upload-label" for="audioFileInput">
+        <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+        选择音频文件上传
+      </label>
+      <input type="file" id="audioFileInput" accept="audio/*" style="display:none;">
+      <div class="upload-hint">支持 mp3、m4a、wav、webm 等格式</div>
+      <div class="file-name" id="fileName"></div>
+    </div>
+  </div>
+
+  <div class="divider hidden" id="divider2"></div>
+
+  <!-- 同步日志 -->
+  <div class="sync-log hidden" id="syncLog"></div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ===== WebDAV 配置 =====
+    // 通过 Cloudflare Worker 代理坚果云 WebDAV（坚果云本身不支持 CORS）
+    const REMOTE_DIR = 'cige-mobile';
+    let wdUser = localStorage.getItem('cige_wd_user') || '';
+    let wdPass = localStorage.getItem('cige_wd_pass') || '';
+    let wdProxy = localStorage.getItem('cige_wd_proxy') || '';
+    let isOnline = false;
+
+    // ===== 状态管理 =====
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let audioBlob = null;
+    let recordTimer = null;
+    let recordSeconds = 0;
+    let isRecording = false;
+    const recordSupported = window.isSecureContext && navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function';
+
+    // ===== 工具函数 =====
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2000);
+    }
+
+    function addLog(text, ok = true) {
+      const log = document.getElementById('syncLog');
+      const item = document.createElement('div');
+      item.className = 'log-item' + (ok ? '' : ' fail');
+      item.innerHTML = '<span class="dot"></span><span>' + new Date().toLocaleTimeString('zh-CN') + ' ' + text + '</span>';
+      log.prepend(item);
+    }
+
+    function authHeader() {
+      return 'Basic ' + btoa(wdUser + ':' + wdPass);
+    }
+
+    // 代理地址归一化：去掉末尾斜杠
+    function proxyBase() {
+      return wdProxy.replace(/\/+$/, '');
+    }
+
+    function buildUrl(path) {
+      return proxyBase() + '/dav/' + path;
+    }
+
+    // ===== WebDAV 操作 =====
+    async function ensureRemoteDir() {
+      try {
+        await fetch(buildUrl(REMOTE_DIR), {
+          method: 'MKCOL',
+          headers: { Authorization: authHeader() },
+        });
+      } catch (e) {
+        // 目录已存在会返回 405，忽略
+      }
+    }
+
+    async function uploadJson(fileName, data) {
+      await ensureRemoteDir();
+      const resp = await fetch(buildUrl(REMOTE_DIR + '/' + fileName), {
+        method: 'PUT',
+        headers: {
+          Authorization: authHeader(),
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!resp.ok && resp.status !== 201 && resp.status !== 204) {
+        throw new Error('HTTP ' + resp.status);
+      }
+    }
+
+    async function uploadAudio(fileName, blob) {
+      await ensureRemoteDir();
+      const resp = await fetch(buildUrl(REMOTE_DIR + '/' + fileName), {
+        method: 'PUT',
+        headers: {
+          Authorization: authHeader(),
+          'Content-Type': 'application/octet-stream',
+        },
+        body: blob,
+      });
+      if (!resp.ok && resp.status !== 201 && resp.status !== 204) {
+        throw new Error('HTTP ' + resp.status);
+      }
+    }
+
+    async function checkConnection() {
+      const dot = document.getElementById('statusDot');
+      const text = document.getElementById('statusText');
+      if (!wdUser || !wdPass || !wdProxy) {
+        isOnline = false;
+        dot.className = 'status-dot offline';
+        text.textContent = '未配置';
+        return;
+      }
+      try {
+        const resp = await fetch(buildUrl(''), {
+          method: 'PROPFIND',
+          headers: {
+            Authorization: authHeader(),
+            Depth: '0',
+          },
+        });
+        if (resp.status === 207 || resp.status === 200) {
+          isOnline = true;
+          dot.className = 'status-dot online';
+          text.textContent = '已连接';
+        } else throw new Error();
+      } catch {
+        isOnline = false;
+        dot.className = 'status-dot offline';
+        text.textContent = '连接失败';
+      }
+    }
+
+    // ===== 配置保存 =====
+    function showMainUI() {
+      document.getElementById('configSection').classList.add('hidden');
+      document.getElementById('quoteSection').classList.remove('hidden');
+      document.getElementById('recordSection').classList.remove('hidden');
+      document.getElementById('syncLog').classList.remove('hidden');
+      document.getElementById('divider1').classList.remove('hidden');
+      document.getElementById('divider2').classList.remove('hidden');
+    }
+
+    function showConfigUI() {
+      document.getElementById('configSection').classList.remove('hidden');
+      document.getElementById('quoteSection').classList.add('hidden');
+      document.getElementById('recordSection').classList.add('hidden');
+      document.getElementById('syncLog').classList.add('hidden');
+      document.getElementById('divider1').classList.add('hidden');
+      document.getElementById('divider2').classList.add('hidden');
+    }
+
+    document.getElementById('saveConfigBtn').addEventListener('click', async () => {
+      const user = document.getElementById('wdUser').value.trim();
+      const pass = document.getElementById('wdPass').value.trim();
+      const proxy = document.getElementById('wdProxy').value.trim();
+      if (!user || !pass) { showToast('请填写账号和密码'); return; }
+      if (!proxy) { showToast('请填写代理地址'); return; }
+      wdUser = user;
+      wdPass = pass;
+      wdProxy = proxy;
+      localStorage.setItem('cige_wd_user', user);
+      localStorage.setItem('cige_wd_pass', pass);
+      localStorage.setItem('cige_wd_proxy', proxy);
+      // 测试连接
+      await checkConnection();
+      if (isOnline) {
+        showToast('连接成功');
+        showMainUI();
+      } else {
+        showToast('连接失败，请检查账号或代理地址');
+      }
+    });
+
+    // 回填已保存的配置到输入框
+    if (wdUser) document.getElementById('wdUser').value = wdUser;
+    if (wdPass) document.getElementById('wdPass').value = wdPass;
+    if (wdProxy) document.getElementById('wdProxy').value = wdProxy;
+
+    // ===== 文字灵感 =====
+    document.getElementById('sendQuoteBtn').addEventListener('click', async () => {
+      const content = document.getElementById('quoteInput').value.trim();
+      const source = document.getElementById('sourceInput').value.trim();
+      const tags = document.getElementById('tagsInput').value.trim() || '移动端';
+      if (!content) { showToast('请输入内容'); return; }
+      if (!isOnline) { showToast('未连接到云端'); return; }
+
+      const btn = document.getElementById('sendQuoteBtn');
+      btn.disabled = true;
+      btn.textContent = '上传中...';
+      try {
+        const id = 'q-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        await uploadJson(id + '.json', {
+          id, type: 'quote', content, source, tags,
+          createdAt: Date.now(),
+        });
+        addLog('文字灵感已上传');
+        showToast('已上传到云端');
+        document.getElementById('quoteInput').value = '';
+      } catch (err) {
+        addLog('文字上传失败: ' + err.message, false);
+        showToast('上传失败');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '上传到云端';
+      }
+    });
+
+    // ===== 录音 =====
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+        mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        audioChunks = [];
+        audioBlob = null;
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          audioBlob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+          const audio = document.getElementById('audioPreview');
+          audio.src = URL.createObjectURL(audioBlob);
+          document.getElementById('recordPreview').style.display = 'flex';
+          stream.getTracks().forEach(t => t.stop());
+        };
+        mediaRecorder.start();
+        isRecording = true;
+        recordSeconds = 0;
+        document.getElementById('recordBtn').classList.add('recording');
+        document.getElementById('recordHint').textContent = '点击停止录音';
+        updateRecordTime();
+      } catch (err) {
+        showToast('无法访问麦克风');
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+        isRecording = false;
+        document.getElementById('recordBtn').classList.remove('recording');
+        document.getElementById('recordHint').textContent = '点击开始录音';
+        if (recordTimer) clearInterval(recordTimer);
+      }
+    }
+
+    function updateRecordTime() {
+      recordTimer = setInterval(() => {
+        recordSeconds++;
+        const m = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+        const s = String(recordSeconds % 60).padStart(2, '0');
+        document.getElementById('recordTime').textContent = m + ':' + s;
+      }, 1000);
+    }
+
+    document.getElementById('recordBtn').addEventListener('click', () => {
+      if (isRecording) stopRecording();
+      else {
+        document.getElementById('recordPreview').style.display = 'none';
+        document.getElementById('recordTime').textContent = '00:00';
+        startRecording();
+      }
+    });
+
+    document.getElementById('sendAudioBtn').addEventListener('click', async () => {
+      if (!audioBlob) { showToast('请先录音'); return; }
+      if (!isOnline) { showToast('未连接到云端'); return; }
+      const btn = document.getElementById('sendAudioBtn');
+      btn.disabled = true;
+      btn.textContent = '上传中...';
+
+      const content = document.getElementById('quoteInput').value.trim();
+      const source = document.getElementById('sourceInput').value.trim();
+      const tags = document.getElementById('tagsInput').value.trim() || '移动端';
+      const duration = recordSeconds;
+
+      try {
+        const id = 'm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+        const audioName = id + '.webm';
+        // 先上传音频文件
+        await uploadAudio(audioName, audioBlob);
+        // 再上传元数据
+        await uploadJson(id + '.json', {
+          id, type: 'motivation', content, source, tags,
+          audioName, duration, createdAt: Date.now(),
+        });
+        addLog('旋律动机已上传 (' + duration + 's)');
+        showToast('已上传到云端');
+        document.getElementById('recordPreview').style.display = 'none';
+        document.getElementById('recordTime').textContent = '00:00';
+        audioBlob = null;
+        if (content) document.getElementById('quoteInput').value = '';
+      } catch (err) {
+        addLog('音频上传失败: ' + err.message, false);
+        showToast('上传失败');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '上传';
+      }
+    });
+
+    // ===== 文件上传 =====
+    document.getElementById('audioFileInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      audioBlob = file;
+      recordSeconds = 0;
+      const audio = document.getElementById('audioPreview');
+      audio.src = URL.createObjectURL(file);
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('recordPreview').style.display = 'flex';
+      audio.onloadedmetadata = () => {
+        recordSeconds = Math.round(audio.duration) || 0;
+      };
+    });
+
+    // ===== 初始化 =====
+    if (recordSupported) {
+      document.getElementById('recordArea').style.display = 'flex';
+    } else {
+      document.getElementById('recordDisabledHint').style.display = 'block';
+    }
+
+    // 已配置则直接显示主界面
+    if (wdUser && wdPass) {
+      showMainUI();
+    }
+    checkConnection();
+    setInterval(checkConnection, 15000);
+  </script>
+</body>
+</html>

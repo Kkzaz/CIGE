@@ -6890,6 +6890,35 @@ body {
   padding: 6px 16px;
 }
 
+.sync-url-box {
+  margin: 8px 0 4px;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 0.5px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-all;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: all;
+}
+.sync-url-box:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
+}
+.sync-url-loading {
+  color: var(--text-tertiary);
+  font-family: inherit;
+  cursor: default;
+  text-align: center;
+}
+.sync-url-loading:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
 .preference-row {
   display: flex;
   align-items: center;

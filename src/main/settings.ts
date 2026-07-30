@@ -19,6 +19,13 @@ export interface GeminiChatSession {
   updatedAt: number;
 }
 
+export interface WebDAVConfig {
+  url: string;        // WebDAV 服务地址，如 https://dav.jianguoyun.com/dav/
+  username: string;   // 坚果云账号
+  password: string;   // 应用密码（非登录密码）
+  enabled: boolean;
+}
+
 export interface AppSettings {
   autoSyncOnLaunch: boolean;
   showSplash: boolean;
@@ -29,6 +36,7 @@ export interface AppSettings {
   readerFontFamily: ReaderFontFamily;
   geminiChatHistory: GeminiChatMessage[];
   geminiChats: GeminiChatSession[];
+  webdav: WebDAVConfig;
 }
 
 const defaultSettings: AppSettings = {
@@ -41,6 +49,12 @@ const defaultSettings: AppSettings = {
   readerFontFamily: 'serif',
   geminiChatHistory: [],
   geminiChats: [],
+  webdav: {
+    url: 'https://dav.jianguoyun.com/dav/',
+    username: '',
+    password: '',
+    enabled: false,
+  },
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'app_settings.json');

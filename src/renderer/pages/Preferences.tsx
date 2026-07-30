@@ -9,6 +9,17 @@ interface UpdateInfo {
   releaseNotes?: string;
 }
 
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '8px 12px',
+  background: 'var(--bg-tertiary)',
+  border: '1px solid var(--border-color)',
+  borderRadius: 6,
+  color: 'var(--text-primary)',
+  fontSize: 14,
+  outline: 'none',
+};
+
 const Preferences: React.FC = () => {
   const { autoSyncOnLaunch, showSplash, setAutoSyncOnLaunch, setShowSplash, reset } = useAppSettingsStore();
   const [version, setVersion] = useState<string>('');
@@ -17,13 +28,72 @@ const Preferences: React.FC = () => {
   const [progress, setProgress] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
+  // WebDAV 配置
+  const [webdavUrl, setWebdavUrl] = useState('https://dav.jianguoyun.com/dav/');
+  const [webdavUser, setWebdavUser] = useState('');
+  const [webdavPass, setWebdavPass] = useState('');
+  const [webdavEnabled, setWebdavEnabled] = useState(false);
+  const [webdavTesting, setWebdavTesting] = useState(false);
+  const [webdavMsg, setWebdavMsg] = useState('');
+  const [webdavSyncing, setWebdavSyncing] = useState(false);
+
   useEffect(() => {
     if (typeof window !== 'undefined' && window.cigeAPI && typeof window.cigeAPI.getAppVersion === 'function') {
       window.cigeAPI.getAppVersion().then((v) => setVersion(v as string));
     } else {
       setVersion('dev');
     }
+    // 加载 WebDAV 配置
+    if (typeof window !== 'undefined' && window.cigeAPI && typeof window.cigeAPI.getAppSettings === 'function') {
+      window.cigeAPI.getAppSettings().then((settings) => {
+        const wd = (settings as { webdav?: { url: string; username: string; password: string; enabled: boolean } }).webdav;
+        if (wd) {
+          setWebdavUrl(wd.url);
+          setWebdavUser(wd.username);
+          setWebdavPass(wd.password);
+          setWebdavEnabled(wd.enabled);
+        }
+      }).catch(() => {});
+    }
   }, []);
+
+  const saveWebdav = (patch: Partial<{ url: string; username: string; password: string; enabled: boolean }>) => {
+    window.cigeAPI?.setAppSetting?.('webdav', {
+      url: patch.url ?? webdavUrl,
+      username: patch.username ?? webdavUser,
+      password: patch.password ?? webdavPass,
+      enabled: patch.enabled ?? webdavEnabled,
+    });
+  };
+
+  const handleTestWebDAV = async () => {
+    saveWebdav({});
+    setWebdavTesting(true);
+    setWebdavMsg('正在测试连接...');
+    try {
+      const result = await window.cigeAPI?.testWebDAV?.();
+      const r = result as { ok: boolean; message: string } | undefined;
+      setWebdavMsg(r?.message || '测试失败');
+    } catch (err) {
+      setWebdavMsg('测试失败: ' + (err as Error).message);
+    } finally {
+      setWebdavTesting(false);
+    }
+  };
+
+  const handleSyncWebDAV = async () => {
+    setWebdavSyncing(true);
+    setWebdavMsg('正在同步...');
+    try {
+      const result = await window.cigeAPI?.syncWebDAV?.();
+      const r = result as { added: number; message: string } | undefined;
+      setWebdavMsg(r?.message || '同步完成');
+    } catch (err) {
+      setWebdavMsg('同步失败: ' + (err as Error).message);
+    } finally {
+      setWebdavSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.cigeAPI || typeof window.cigeAPI.onUpdateStatus !== 'function') {
@@ -148,6 +218,91 @@ const Preferences: React.FC = () => {
           <button className="btn btn-secondary btn-sm preferences-reset" onClick={reset}>
             恢复默认设置
           </button>
+        </div>
+
+        <div className="preferences-section">
+          <h3 className="preferences-section-title">移动端云同步</h3>
+          <div className="preferences-card">
+            <div className="preference-row" style={{ alignItems: 'flex-start' }}>
+              <div className="preference-info">
+                <span className="preference-label">启用云同步（坚果云 WebDAV）</span>
+                <span className="preference-desc">
+                  配置坚果云账号后，手机端可随时随地记录灵感和旋律动机，通过云端同步到桌面端。
+                  <a href="https://help.jianguoyun.com/?p=2064" target="_blank" rel="noopener" style={{ color: 'var(--accent-color)', marginLeft: 4 }}>如何获取应用密码？</a>
+                </span>
+              </div>
+              <span className={`preference-switch ${webdavEnabled ? 'active' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={webdavEnabled}
+                  onChange={(e) => {
+                    setWebdavEnabled(e.target.checked);
+                    saveWebdav({ enabled: e.target.checked });
+                  }}
+                />
+                <span className="preference-switch-track">
+                  <span className="preference-switch-thumb" />
+                </span>
+              </span>
+            </div>
+
+            <div className="webdav-config" style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                className="webdav-input"
+                type="text"
+                placeholder="坚果云账号（邮箱）"
+                value={webdavUser}
+                onChange={(e) => setWebdavUser(e.target.value)}
+                onBlur={() => saveWebdav({ username: webdavUser })}
+                style={inputStyle}
+              />
+              <input
+                className="webdav-input"
+                type="password"
+                placeholder="应用密码（非登录密码）"
+                value={webdavPass}
+                onChange={(e) => setWebdavPass(e.target.value)}
+                onBlur={() => saveWebdav({ password: webdavPass })}
+                style={inputStyle}
+              />
+              <input
+                className="webdav-input"
+                type="text"
+                placeholder="WebDAV 地址"
+                value={webdavUrl}
+                onChange={(e) => setWebdavUrl(e.target.value)}
+                onBlur={() => saveWebdav({ url: webdavUrl })}
+                style={inputStyle}
+              />
+            </div>
+
+            {webdavMsg && (
+              <div className="webdav-msg" style={{ marginTop: 8, fontSize: 13, color: webdavMsg.includes('失败') ? 'var(--danger-color)' : 'var(--text-secondary)' }}>
+                {webdavMsg}
+              </div>
+            )}
+
+            <div className="webdav-actions" style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={handleTestWebDAV}
+                disabled={webdavTesting}
+              >
+                {webdavTesting ? '测试中...' : '测试连接'}
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleSyncWebDAV}
+                disabled={webdavSyncing || !webdavEnabled}
+              >
+                {webdavSyncing ? '同步中...' : '立即同步'}
+              </button>
+            </div>
+
+            <div className="webdav-tip" style={{ marginTop: 10, fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+              配置完成后，手机访问 PWA 页面即可随时记录。桌面端启动时自动拉取云端新条目。
+            </div>
+          </div>
         </div>
 
         <div className="preferences-section">
