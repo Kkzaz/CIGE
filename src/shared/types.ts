@@ -61,6 +61,44 @@ export interface Folder {
   created_at: string;
 }
 
+// ====================== App Settings ======================
+
+export type ReaderTheme = 'light' | 'sepia' | 'dark';
+export type ReaderFontFamily = 'serif' | 'sans' | 'system';
+
+export interface GeminiChatMessage {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface GeminiChatSession {
+  id: string;
+  title: string;
+  messages: GeminiChatMessage[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * 应用设置（主进程 / 渲染进程共享单一来源）
+ * 字段变化时请同步更新 defaultSettings（settings.ts 与 appSettings.ts 各自保留默认值副本，
+ * 因为主进程 JSON 文件需独立可读写，渲染端 zustand 也需独立初始化）
+ */
+export interface AppSettings {
+  autoSyncOnLaunch: boolean;
+  showSplash: boolean;
+  readerFontSize: number;
+  readerLineHeight: number;
+  readerParaSpacing: number;
+  readerTheme: ReaderTheme;
+  readerFontFamily: ReaderFontFamily;
+  readerReadingSpeed: number;
+  readerAutoEnterImmersive: boolean;
+  geminiChatHistory: GeminiChatMessage[];
+  geminiChats: GeminiChatSession[];
+}
+
 // IPC channel names
 export const IPC_CHANNELS = {
   // Writings

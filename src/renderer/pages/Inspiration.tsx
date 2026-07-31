@@ -1,21 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Select from '../components/Select';
+import type { GeminiChatMessage as ChatMessage, GeminiChatSession as ChatSession } from '../../shared/types';
 
 type InspirationTab = 'lyric' | 'chat';
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'model';
-  content: string;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  createdAt: number;
-  updatedAt: number;
-}
 
 interface LyricResult {
   songId: number;

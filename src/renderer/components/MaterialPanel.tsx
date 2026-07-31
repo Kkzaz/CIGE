@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import type { RhymeSuggestion, RhymeSource } from './Editor';
+import type { RhymeSuggestion, RhymeSource } from './editorTypes';
 
 interface MaterialPanelProps {
   rhymeSuggestion: RhymeSuggestion | null;
@@ -157,7 +157,7 @@ const MaterialPanel: React.FC<MaterialPanelProps> = ({
   }, [activeTab]);
 
   return (
-    <div className="ws-rhyme-panel">
+    <div className="ws-rhyme-panel" data-active-tab={activeTab}>
       {/* Tabs */}
       <div className="frp-tabs">
         <button

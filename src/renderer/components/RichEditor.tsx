@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Extension } from '@tiptap/core';
@@ -12,8 +12,9 @@ import { Italic } from '@tiptap/extension-italic';
 import { Heading } from '@tiptap/extension-heading';
 import { Placeholder } from '@tiptap/extension-placeholder';
 import { useEditorSettingsStore } from '../store/editorSettings';
-import { EditorProps, RhymeSuggestion, LyricStats } from './Editor';
+import { EditorProps, RhymeSuggestion, LyricStats } from './editorTypes';
 import { findRhymes } from '../../shared/rhyme-data';
+import StatusBar from './StatusBar';
 
 function computeLyricStats(text: string): LyricStats {
   const lines = text.split('\n').filter((l) => l.trim());
@@ -466,6 +467,7 @@ const RichEditor: React.FC<EditorProps> = ({ value, onChange, onSave, onStatsCha
           height: '100%',
         }}
       />
+      <StatusBar />
     </div>
   );
 };

@@ -16,8 +16,6 @@ import { registerRecycleHandlers } from './handlers/recycle';
 import { registerSettingsHandlers } from './handlers/settings';
 import { registerUpdateHandlers } from './handlers/update';
 import { registerGeminiHandlers } from './handlers/gemini';
-import { registerWebDAVHandlers } from './handlers/webdav';
-import { getAppSettings } from './settings';
 
 import { ensureLocalService, killLocalService } from './services/rhymeServer';
 import { cancelAllImports } from './services/bookImportService';
@@ -203,7 +201,6 @@ function registerIpcHandlers(): void {
   registerSettingsHandlers();
   registerUpdateHandlers(getMainWindow);
   registerGeminiHandlers();
-  registerWebDAVHandlers(db);
 }
 
 app.whenReady().then(async () => {
@@ -218,18 +215,15 @@ app.whenReady().then(async () => {
     return permission === 'media';
   });
 
-  // 确保本地 Python 数据服务已启动（会自动传递 REDFOX_API_KEY）
-  await ensureLocalService();
-
+  // 先创建窗口立即可见，避免被 Python 服务启动阻塞导致“点两下才启动”
   const win = await createMainWindow();
 
-  // 启动后从云端拉取新条目（异步，不阻塞启动）
-  if (getAppSettings().webdav.enabled) {
-    import('./handlers/webdav').then(({ pullFromCloudManually }) => {
-      pullFromCloudManually(getDatabase()).catch(() => {});
-    });
-  }
   registerGlobalShortcuts(win);
+
+  // 后台启动本地 Python 数据服务（不阻塞窗口显示）
+  ensureLocalService().catch((err) => {
+    console.log('[LocalService] 启动异常:', err);
+  });
 
   // 启动后延迟检查更新
   if (app.isPackaged) {

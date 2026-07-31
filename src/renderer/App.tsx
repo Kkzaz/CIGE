@@ -1,9 +1,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import BottomNav from './components/BottomNav';
-import StatusBar from './components/StatusBar';
 import SplashScreen from './components/SplashScreen';
-import useStatusBarStore from './store/statusBar';
 import { useAppSettingsStore } from './store/appSettings';
 
 const Write = React.lazy(() => import('./pages/Write'));
@@ -39,9 +37,7 @@ const App: React.FC = () => {
   const { showSplash: showSplashSetting } = useAppSettingsStore();
   const [showSplash, setShowSplash] = useState(showSplashSetting);
   const location = useLocation();
-  const { charCount, lineCount, rhymeFinals, verseCount, chorusCount, bridgeCount, outroCount, saveStatus } = useStatusBarStore();
 
-  const showStatusBar = location.pathname === '/write';
   const isReader = location.pathname.startsWith('/reader/');
 
   useEffect(() => {
@@ -125,18 +121,6 @@ const App: React.FC = () => {
           </Routes>
         </Suspense>
       </main>
-      {showStatusBar && (
-        <StatusBar
-          charCount={charCount}
-          lineCount={lineCount}
-          rhymeFinals={rhymeFinals}
-          verseCount={verseCount}
-          chorusCount={chorusCount}
-          bridgeCount={bridgeCount}
-          outroCount={outroCount}
-          saveStatus={saveStatus}
-        />
-      )}
       {!isReader && <BottomNav />}
     </div>
   );

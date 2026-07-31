@@ -8,7 +8,7 @@ import SettingsPanel from '../components/SettingsPanel';
 import WriteToolbar from '../components/write/WriteToolbar';
 import Sidebar from '../components/write/Sidebar';
 import WritingItem from '../components/write/WritingItem';
-import type { RhymeSuggestion, LyricStats, RhymeSource } from '../components/Editor';
+import type { RhymeSuggestion, LyricStats, RhymeSource } from '../components/editorTypes';
 import type { Writing, Folder } from '../../shared/types';
 
 type SaveStatus = 'saved' | 'unsaved' | 'saving';
@@ -126,6 +126,16 @@ const Write: React.FC = () => {
     loadFolders();
   }, []);
 
+  // 响应式：窗口宽度 < 1100px 自动折叠 Sidebar
+  useEffect(() => {
+    const update = () => {
+      setSidebarCollapsed(window.innerWidth < 1100);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   useEffect(() => { try { localStorage.setItem('cige_sidebar_view', viewMode); } catch {} }, [viewMode]);
 
   useEffect(() => {
@@ -223,7 +233,17 @@ const Write: React.FC = () => {
   const loadWritings = async () => {
     const data = await window.cigeAPI.getWritings();
     setWritings(data as Writing[]);
-    if ((data as Writing[]).length > 0 && !currentWritingRef.current) {
+    if ((data as Writing[]).length === 0) return;
+    const current = currentWritingRef.current;
+    if (current && (data as Writing[]).some((w) => w.id === current.id)) {
+      // currentWriting 仍存在，但组件重新挂载后 content state 已重置，需重新加载内容
+      if (!contentRef.current) {
+        const full = await window.cigeAPI.getWritingById(current.id);
+        setContent((full as Writing).content);
+        updateSaveStatus('saved');
+        contentDirtyRef.current = false;
+      }
+    } else {
       selectWriting((data as Writing[])[0]);
     }
   };

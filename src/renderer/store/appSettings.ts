@@ -1,19 +1,9 @@
 import { create } from 'zustand';
+import type { AppSettings as AppSettingsData, ReaderTheme, ReaderFontFamily } from '../../shared/types';
 
-export type ReaderTheme = 'light' | 'sepia' | 'dark';
-export type ReaderFontFamily = 'serif' | 'sans' | 'system';
+export type { ReaderTheme, ReaderFontFamily };
 
-export interface AppSettings {
-  autoSyncOnLaunch: boolean;
-  showSplash: boolean;
-  readerFontSize: number;
-  readerLineHeight: number;
-  readerParaSpacing: number;
-  readerTheme: ReaderTheme;
-  readerFontFamily: ReaderFontFamily;
-  readerReadingSpeed: number;
-  readerAutoEnterImmersive: boolean;
-
+interface AppSettingsStore extends AppSettingsData {
   setAutoSyncOnLaunch: (value: boolean) => void;
   setShowSplash: (value: boolean) => void;
   setReaderFontSize: (value: number) => void;
@@ -26,28 +16,18 @@ export interface AppSettings {
   reset: () => void;
 }
 
-const defaultSettings: Omit<
-  AppSettings,
-  | 'setAutoSyncOnLaunch'
-  | 'setShowSplash'
-  | 'setReaderFontSize'
-  | 'setReaderLineHeight'
-  | 'setReaderParaSpacing'
-  | 'setReaderTheme'
-  | 'setReaderFontFamily'
-  | 'setReaderReadingSpeed'
-  | 'setReaderAutoEnterImmersive'
-  | 'reset'
-> = {
+const defaultSettings: AppSettingsData = {
   autoSyncOnLaunch: true,
   showSplash: true,
-  readerFontSize: 18,
+  readerFontSize: 17,
   readerLineHeight: 1.8,
   readerParaSpacing: 0.8,
   readerTheme: 'light',
   readerFontFamily: 'serif',
   readerReadingSpeed: 500,
   readerAutoEnterImmersive: false,
+  geminiChatHistory: [],
+  geminiChats: [],
 };
 
 const hasMainAPI = typeof window !== 'undefined' && window.cigeAPI && typeof window.cigeAPI.getAppSettings === 'function';
@@ -65,7 +45,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export const useAppSettingsStore = create<AppSettings>((set) => ({
+export const useAppSettingsStore = create<AppSettingsStore>((set) => ({
   ...initialSettings,
   setAutoSyncOnLaunch: (value) => {
     set((state) => {

@@ -219,11 +219,6 @@ export function registerBookHandlers(db: Database): void {
     return insertImportedBook(db, { title, author: '', content: stripped }, '网络书源');
   });
 
-  ipcMain.handle('book:import-clipboard', async () => {
-    // The clipboard read is handled by renderer; this handler receives the text
-    throw new Error('Use book:import-manual or read clipboard in renderer');
-  });
-
   ipcMain.handle('book:import-manual', (_event, data: { title: string; author: string; content: string; category?: string; tags?: string }) => {
     if (!data.title.trim() || !data.content.trim()) throw new Error('Title and content are required');
     const cover = COVER_PALETTE[Math.floor(Math.random() * COVER_PALETTE.length)];

@@ -1,43 +1,9 @@
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import type { AppSettings } from '../shared/types';
 
-export type ReaderTheme = 'light' | 'sepia' | 'dark';
-export type ReaderFontFamily = 'serif' | 'sans' | 'system';
-
-export interface GeminiChatMessage {
-  id: string;
-  role: 'user' | 'model';
-  content: string;
-}
-
-export interface GeminiChatSession {
-  id: string;
-  title: string;
-  messages: GeminiChatMessage[];
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface WebDAVConfig {
-  url: string;        // WebDAV 服务地址，如 https://dav.jianguoyun.com/dav/
-  username: string;   // 坚果云账号
-  password: string;   // 应用密码（非登录密码）
-  enabled: boolean;
-}
-
-export interface AppSettings {
-  autoSyncOnLaunch: boolean;
-  showSplash: boolean;
-  readerFontSize: number;
-  readerLineHeight: number;
-  readerParaSpacing: number;
-  readerTheme: ReaderTheme;
-  readerFontFamily: ReaderFontFamily;
-  geminiChatHistory: GeminiChatMessage[];
-  geminiChats: GeminiChatSession[];
-  webdav: WebDAVConfig;
-}
+export type { AppSettings, ReaderTheme, ReaderFontFamily, GeminiChatMessage, GeminiChatSession } from '../shared/types';
 
 const defaultSettings: AppSettings = {
   autoSyncOnLaunch: true,
@@ -47,14 +13,10 @@ const defaultSettings: AppSettings = {
   readerParaSpacing: 0.8,
   readerTheme: 'light',
   readerFontFamily: 'serif',
+  readerReadingSpeed: 500,
+  readerAutoEnterImmersive: false,
   geminiChatHistory: [],
   geminiChats: [],
-  webdav: {
-    url: 'https://dav.jianguoyun.com/dav/',
-    username: '',
-    password: '',
-    enabled: false,
-  },
 };
 
 const settingsPath = path.join(app.getPath('userData'), 'app_settings.json');

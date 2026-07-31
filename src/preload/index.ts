@@ -121,8 +121,6 @@ const api = {
   getAppSettings: () => ipcRenderer.invoke('app:get-settings'),
   setAppSetting: (key: string, value: unknown) => ipcRenderer.invoke('app:set-setting', key, value),
   resetAppSettings: () => ipcRenderer.invoke('app:reset-settings'),
-  testWebDAV: () => ipcRenderer.invoke('webdav:test'),
-  syncWebDAV: () => ipcRenderer.invoke('webdav:sync'),
 
   // Auto update
   checkForUpdate: () => ipcRenderer.invoke('update:check'),

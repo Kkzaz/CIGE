@@ -1,35 +1,18 @@
 import React from 'react';
+import useStatusBarStore from '../store/statusBar';
 
-interface StatusBarProps {
-  charCount: number;
-  lineCount: number;
-  rhymeFinals: string[];
-  verseCount: number;
-  chorusCount: number;
-  bridgeCount: number;
-  outroCount: number;
-  saveStatus: 'saved' | 'saving' | 'unsaved';
-}
+const StatusBar: React.FC = () => {
+  const { charCount, lineCount, rhymeFinals, verseCount, chorusCount, bridgeCount, outroCount, saveStatus } = useStatusBarStore();
 
-const StatusBar: React.FC<StatusBarProps> = ({
-  charCount,
-  lineCount,
-  rhymeFinals,
-  verseCount,
-  chorusCount,
-  bridgeCount,
-  outroCount,
-  saveStatus,
-}) => {
   return (
-    <div className="global-statusbar">
+    <div className="lyric-editor-statusbar">
       <div className="ws-status-left">
         <span>{charCount} 字</span>
-        <span className="ws-status-sep">|</span>
+        <span className="ws-status-sep">·</span>
         <span>{lineCount} 行</span>
-        <span className="ws-status-sep">|</span>
+        <span className="ws-status-sep">·</span>
         <span>韵脚 {rhymeFinals.length} 种</span>
-        <span className="ws-status-sep">|</span>
+        <span className="ws-status-sep">·</span>
         <span>主歌 {verseCount}</span>
         <span>副歌 {chorusCount}</span>
         {bridgeCount > 0 && <span>桥段 {bridgeCount}</span>}
